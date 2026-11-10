@@ -225,10 +225,13 @@ for p in players:
         if cone: ov['agi'] = round(max(40, min(99, 95 - (cone - 6.7) * 37 - max(0, age - 29))))
     if p['pos'] == 'QB' and rate(p['pid'], 'rushing_yards') > 25: ov['spd'] = max(ov.get('spd', 0), round(min(94, 74 + rate(p['pid'], 'rushing_yards') / 4)))
     con = contracts.get(norm(r['full_name']))
-    if con and (NICK2ABBR.get(con['team']) == r['team'] or r['status'] == 'CUT'):
+    still_running = con and num(con['year_signed']) + num(con['years']) > SEASON
+    if still_running and (NICK2ABBR.get(con['team']) == r['team'] or r['status'] == 'CUT'):
         sal = round(num(con['apy']) / 1e6, 2); yrs = int(max(1, min(6, num(con['year_signed']) + num(con['years']) - SEASON)))
+    elif p['exp'] <= 3:  # rookie-scale deal from draft slot
+        sal = round(max(0.84, (11 - dn * 0.3) if 0 < dn <= 32 else (2.2 - dn * 0.003) if 0 < dn <= 260 else 0.9), 2); yrs = max(1, 4 - p['exp'])
     else:
-        sal = round(max(0.84, (11 - dn * 0.04) if 0 < dn <= 32 else 1.1), 2) if p['exp'] <= 3 else 1.3; yrs = max(1, 4 - p['exp']) if p['exp'] <= 3 else 1
+        sal = -1; yrs = 0  # veteran: the game estimates a market deal
     if r['status'] == 'CUT': yrs = 1
     entry_year = int(num(r['entry_year'] or r['rookie_year'], SEASON - p['exp']))
     out_players.append([

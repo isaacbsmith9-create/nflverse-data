@@ -82,6 +82,7 @@ function renderHub() {
   document.documentElement.style.setProperty('--tc1', t.c1);
   $('#hubHead').innerHTML = `<div class="wrap">${badge(t, 'lg')}<div class="grow"><div class="hub-title">${esc(teamName(t))}</div>
     <div class="hub-sub">${t.coach ? 'Head coach ' + esc(t.coach) + ' · ' : ''}${L.season} · ${phaseLabel(L.phase, L.week)} · <b class="num">${recStr(t)}</b> · OVR ${o.ovr} (OFF ${o.off} / DEF ${o.def}) · Cap room <b class="num">${fmtMoney(capRoom(L, t))}</b> · Roster ${activeCount(L, t)}/53${t.roster.length > activeCount(L, t) ? ` (+${t.roster.length - activeCount(L, t)} IR)` : ''}</div></div>
+    <div class="rings">${[['OVR', o.ovr], ['OFF', o.off], ['DEF', o.def]].map(([n, v]) => `<div class="ring" style="--v:${v}"><b>${v}</b><span>${n}</span></div>`).join('')}</div>
     <button class="btn sm ghost" data-act="menu">Menu</button></div>`;
   const dotTab = { home: ['recap', 'resign', 'fa', 'draft'].includes(L.phase), draft: L.phase === 'draft', fa: L.phase === 'fa' };
   $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${n}${dotTab[k] ? '<span class="dot"></span>' : ''}</button>`).join('');
@@ -166,7 +167,7 @@ function viewRoster() {
   const sorters = { pos: (a, b) => POS_ORDER[a.pos] - POS_ORDER[b.pos] || b.ovr - a.ovr, ovr: (a, b) => b.ovr - a.ovr, age: (a, b) => a.age - b.age, sal: (a, b) => b.con.sal - a.con.sal };
   ps.sort(sorters[ROSTER_SORT] || sorters.pos);
   const rows = ps.map(p => `<tr class="click" data-act="player" data-pid="${p.id}"><td>${p.pos}</td><td>#${p.num} ${esc(pname(p))}${p.inj ? ` <span class="inj">${p.ir ? 'IR' : 'INJ'} ${p.inj}w</span>` : ''}${p.rookie ? ' <span class="pill">R</span>' : ''}</td>
-    <td class="r">${p.age}</td><td class="r">${ovrTag(p.ovr)}</td><td class="dev-${p.dev}">${devLabel(p.dev)}</td><td class="r">${fmtMoney(p.con.sal)}</td><td class="r">${p.con.yrs}</td><td class="small muted">${statLine(p)}</td></tr>`).join('');
+    <td class="r">${p.age}</td><td class="r">${ovrTag(p.ovr)}</td><td>${p.dev !== 'N' ? `<span class="devb dev-${p.dev}">${devLabel(p.dev)}</span>` : '<span class="muted small">Normal</span>'}</td><td class="r">${fmtMoney(p.con.sal)}</td><td class="r">${p.con.yrs}</td><td class="small muted">${statLine(p)}</td></tr>`).join('');
   return `<div class="card stack"><div class="row"><h2 class="grow" style="margin:0">Roster</h2>
     <select data-act="roster-filter">${['ALL', ...POSITIONS].map(p => `<option ${p === ROSTER_FILTER ? 'selected' : ''}>${p}</option>`).join('')}</select>
     <select data-act="roster-sort">${[['pos', 'Sort: Position'], ['ovr', 'Sort: OVR'], ['age', 'Sort: Age'], ['sal', 'Sort: Salary']].map(([k, n]) => `<option value="${k}" ${k === ROSTER_SORT ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
@@ -198,12 +199,15 @@ function playerModal(pid) {
       ${tradeAllowed(L) ? `<button class="btn sm" data-act="shop" data-pid="${p.id}">Trade him</button>` : ''}
       <button class="btn sm danger" data-act="cut" data-pid="${p.id}">Release</button>`;
   } else if (fa && !prospect) {
-    const ask = faAsk(p);
-    actions = `<label>Years <select id="faYrs">${[1, 2, 3, 4, 5].map(y => `<option ${y === 2 ? 'selected' : ''}>${y}</option>`).join('')}</select></label><button class="btn sm primary" data-act="sign" data-pid="${p.id}">Sign for ${fmtMoney(ask)}/yr</button>`;
+    const ask = faAsk(p), rivals = faRivals(L, p), interest = Math.round(faInterest(L, p, L.userTid) * 100);
+    actions = `<div class="stack" style="width:100%;gap:8px"><div class="small muted">Asking ${fmtMoney(ask)}/yr · Interest in your team ${interest}%${rivals ? ` · ${rivals} rival team${rivals > 1 ? 's' : ''} bidding` : ''}</div>
+      <div class="row"><label>Salary $M/yr <input type="number" id="faSal" step="0.25" min="0.75" value="${ask.toFixed(2)}" style="width:110px"></label>
+      <label>Years <select id="faYrs">${[1, 2, 3, 4, 5].map(y => `<option ${y === 2 ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
+      <button class="btn sm primary" data-act="sign" data-pid="${p.id}">Make offer</button></div><div class="small" id="negMsg"></div></div>`;
   } else if (t && tradeAllowed(L)) actions = `<button class="btn sm" data-act="trade-for" data-pid="${p.id}">Trade for him</button>`;
   const header = prospect ? `${p.col} · Age ${p.age} · Proj. round ${p.proj > 7 ? 'UDFA' : p.proj} · Scouted OVR ${p.scout.lo}–${p.scout.hi} · Potential ${p.scout.potG}`
     : `${t ? esc(teamName(t)) : 'Free agent'} · Age ${p.age} · ${p.col} · ${devLabel(p.dev)} dev${mine ? ` · Potential ${potGrade(p.pot)}` : ''}`;
-  modal(`<div class="modal-head">${prospect ? '' : ovrTag(p.ovr)}<div class="grow"><h2 style="margin:0">#${p.num} ${esc(pname(p))} <span class="muted">${p.pos}</span></h2><div class="muted small">${header}</div></div><button class="btn sm ghost x" data-act="close">✕</button></div>
+  modal(`<div class="modal-head pcard" style="--tc:${t ? t.c1 : '#2a3a34'}">${prospect ? '' : `<div class="shield ${ovrClass(p.ovr)}"><b>${p.ovr}</b><span>OVR</span></div>`}<div class="grow"><div class="row" style="gap:8px"><span class="pos-chip">${p.pos}</span>${p.dev !== 'N' ? `<span class="devb dev-${p.dev}">${devLabel(p.dev)}</span>` : ''}</div><h2 style="margin:4px 0 0">#${p.num} ${esc(pname(p))}</h2><div class="muted small">${header}</div></div><button class="btn sm ghost x" data-act="close">✕</button></div>
     ${!prospect ? `<div class="row small"><span class="pill">Contract ${fmtMoney(p.con.sal)}/yr · ${p.con.yrs} yr${p.con.yrs === 1 ? '' : 's'}</span>${p.inj ? `<span class="pill red">Injured — ${p.inj} wk</span>` : ''}${p.draft ? `<span class="pill">Drafted ${p.draft.season} R${p.draft.round} #${p.draft.pick}</span>` : ''}</div>` : ''}
     <div class="bars">${bars}</div>
     ${p.st && p.st.gp ? `<div><div class="eyebrow">This season (${p.st.gp} games)</div><div>${statLine(p) || '—'}</div></div>` : ''}
@@ -292,12 +296,12 @@ function tradeRefresh() {
   const el = $('#tradeSummary'); if (!el) return;
   const L = LEAGUE; const s = tradeSides();
   const empty = !s.give.players.length && !s.give.picks.length && !s.get.players.length && !s.get.picks.length;
-  if (empty) { el.innerHTML = '<div class="muted small">Check players or picks on both sides. The AI accepts deals that give it more value than it sends — young, high-rated players and early picks are worth the most.</div>'; return; }
+  if (empty) { el.innerHTML = '<div class="muted small"><b>Tip:</b> check only your own players and press <b>Find offers</b> to shop them to every team. Or check players or picks on both sides. The AI accepts deals that give it more value than it sends — young, high-rated players and early picks are worth the most.</div>'; return; }
   const ev = tradeEval(L, TRADE.tid, s.give, s.get);
   const pctv = clamp(ev.ratio / 1.08 * 70, 0, 100);
   el.innerHTML = `<div class="stack" style="gap:8px"><div class="row small"><span class="grow">AI interest</span><b>${ev.ok ? 'Will accept' : ev.reason ? 'Blocked' : ev.ratio > 0.85 ? 'Close — add a little more' : 'Not interested'}</b></div>
     <div class="meter"><b style="width:${pctv}%"></b></div>${ev.reason ? `<div class="small" style="color:var(--red)">${esc(ev.reason)}</div>` : ''}
-    <div class="row"><button class="btn primary" data-act="trade-propose" ${ev.ok ? '' : 'disabled'}>Propose trade</button><button class="btn ghost" data-act="trade-clear">Clear</button></div></div>`;
+    <div class="row"><button class="btn primary" data-act="trade-propose" ${ev.ok ? '' : 'disabled'}>Propose trade</button>${s.give.players.length || s.give.picks.length ? '<button class="btn" data-act="trade-finder">Find offers from all teams</button>' : ''}<button class="btn ghost" data-act="trade-clear">Clear</button></div></div>`;
 }
 
 // ---------- free agents ----------
@@ -430,12 +434,28 @@ document.addEventListener('click', e => {
     case 'promote': { const p = L.players[+el.dataset.pid]; const t = UT(); fixDepth(L, t); t.depth[p.pos] = [p.id, ...t.depth[p.pos].filter(x => x !== p.id)]; save(); closeModal(); toast(`${pshort(p)} is now the starting ${p.pos}.`); renderHub(); break; }
     case 'cut': { const p = L.players[+el.dataset.pid]; confirmBox(`Release ${pname(p)}? His ${fmtMoney(p.con.sal)} salary comes off your cap.`, () => { releaseToFA(L, p); addNews(L, `Released ${p.pos} ${pname(p)}.`); save(); renderHub(); }); break; }
     case 'sign': {
-      const p = L.players[+el.dataset.pid]; const yrs = +$('#faYrs').value;
-      const err = signFA(L, L.userTid, p, yrs, faAsk(p)); if (err) { toast(err); break; }
-      closeModal(); save(); renderHub(); toast(`Signed ${pname(p)}.`); break;
+      const p = L.players[+el.dataset.pid]; const yrs = +$('#faYrs').value; const sal = Math.max(0.75, +$('#faSal').value || faAsk(p));
+      if (capRoom(L, UT()) < sal) { $('#negMsg').textContent = `You only have ${fmtMoney(capRoom(L, UT()))} in cap room.`; break; }
+      const r = negotiate(L, p, sal, yrs);
+      if (!r.ok) { $('#negMsg').textContent = r.msg; save(); break; }
+      const err = signFA(L, L.userTid, p, yrs, sal); if (err) { $('#negMsg').textContent = err; break; }
+      closeModal(); save(); renderHub(); toast(`Signed ${pname(p)}: ${yrs} yr / ${fmtMoney(sal)} per year.`); break;
     }
     case 'shop': { TRADE = { tid: TRADE.tid, give: { players: [+el.dataset.pid], picks: [] }, get: { players: [], picks: [] } }; TAB = 'trade'; closeModal(); renderHub(); break; }
     case 'trade-for': { const p = L.players[+el.dataset.pid]; TRADE = { tid: p.tid, give: { players: [], picks: [] }, get: { players: [p.id], picks: [] } }; TAB = 'trade'; closeModal(); renderHub(); break; }
+    case 'trade-finder': {
+      const s = tradeSides(); const offers = findOffers(L, s.give); TRADE.offers = offers;
+      const giveTxt = s.give.players.map(id => `${L.players[id].pos} ${esc(pshort(L.players[id]))}`).concat(s.give.picks.map(pk => pickLabel(L, pk))).join(', ');
+      const rows = offers.map((o, i) => { const t = L.teams[o.tid]; const items = o.get.players.map(id => { const p = L.players[id]; return `${ovrTag(p.ovr)} ${p.pos} ${esc(pname(p))} <span class="muted small">${p.age}y · ${fmtMoney(p.con.sal)}</span>`; }).concat(o.get.picks.map(pk => `<span class="pill">${pickLabel(L, pk)}</span>`)).join('<br>');
+        return `<div class="card row" style="align-items:flex-start">${badge(t)}<div class="grow"><b>${esc(teamName(t))}</b> <span class="muted small">${recStr(t)}</span><div class="small" style="margin-top:6px;line-height:1.9">${items}</div></div><button class="btn sm primary" data-act="accept-offer" data-i="${i}">Accept</button></div>`; }).join('');
+      modal(`<div class="modal-head"><h2>Offers for ${giveTxt}</h2><button class="btn sm ghost x" data-act="close">✕</button></div>${rows || '<p class="muted">No team wants that package. Try adding a pick or a better player.</p>'}`);
+      break;
+    }
+    case 'accept-offer': {
+      const o = TRADE.offers && TRADE.offers[+el.dataset.i]; if (!o) break; const s = tradeSides();
+      const ev = tradeEval(L, o.tid, s.give, o.get); if (!ev.ok) { toast(ev.reason || 'Offer expired.'); break; }
+      executeTrade(L, o.tid, s.give, o.get); TRADE.give = { players: [], picks: [] }; TRADE.get = { players: [], picks: [] }; closeModal(); save(); renderHub(); toast('Trade done!'); break;
+    }
     case 'trade-clear': TRADE.give = { players: [], picks: [] }; TRADE.get = { players: [], picks: [] }; renderHub(); break;
     case 'trade-propose': {
       const s = tradeSides(); const ev = tradeEval(L, TRADE.tid, s.give, s.get);
@@ -454,6 +474,7 @@ document.addEventListener('click', e => {
     case 'resume': $('#pause').hidden = true; if (GAME) GAME.paused = false; break;
     case 'sim-game-rest': simRestOfGame(); break;
     case 'toggle-touch': touchMode = !touchMode; applyTouch(); break;
+    case 'toggle-cam': if (GAME) { const m = GAME.live.camMode === 'top' ? '3d' : 'top'; GAME.live.camMode = m; LEAGUE.settings.cam = m; save(); toast(m === 'top' ? 'Camera: Top-down' : 'Camera: Broadcast'); } break;
     case 'toggle-sound': window.__mute = !window.__mute; try { localStorage.setItem('gd_mute', window.__mute ? '1' : '0'); } catch (e) { } toast(window.__mute ? 'Sound off' : 'Sound on'); break;
     case 'call-play': if (GAME) { $('#playcall').hidden = true; GAME.live.choose(el.dataset.id); } break;
     case 'call-auto': if (GAME) { $('#playcall').hidden = true; const lg = GAME.live; lg.choose(lg.userOnOffense() ? autoOffCall(lg.gs) : cpuDefCall(lg.gs).id); } break;
@@ -512,6 +533,7 @@ function startLiveGame(hid, aid, userTid, opts = {}) {
   const live = new LiveGame(L, gs, userSide, {
     call: mode => showPlayCall(mode), update: () => updateHUD(), result: b => showBanner(b), toast: m => toast(m, 3000), over: () => showFinal(),
   });
+  live.camMode = L.settings.cam || '3d';
   GAME = { live, gs, opts, paused: false, last: performance.now() };
   applyTouch(); resizeCanvas(); updateHUD();
   $('#final').hidden = true; $('#pause').hidden = true; $('#banner').hidden = true;
@@ -523,7 +545,10 @@ function loop(now) {
   if (!GAME) return;
   const dt = Math.min(0.05, (now - GAME.last) / 1000); GAME.last = now;
   if (!GAME.paused) {
-    GAME.live.input.mx = KEYS.mx + JOY.x; GAME.live.input.my = KEYS.my + JOY.y; GAME.live.input.sprint = KEYS.sprint || JOY.sprint;
+    const sx = KEYS.mx + JOY.x, sy = KEYS.my + JOY.y, inp = GAME.live.input;
+    if (GAME.live.camMode === 'top') { inp.mx = sx; inp.my = sy; }
+    else { inp.mx = -sy; inp.my = sx; } // broadcast view: stick up = downfield, stick right = offense's right
+    inp.sprint = KEYS.sprint || JOY.sprint;
     GAME.live.update(dt);
   }
   const cv = $('#cv'), ctx = cv.getContext('2d'); const dpr = window.devicePixelRatio || 1;

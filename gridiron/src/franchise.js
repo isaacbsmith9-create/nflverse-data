@@ -264,6 +264,7 @@ function simWeek(L, includeUser = true) {
       }
       injuriesTick(L, played);
       aiRosterMoves(L);
+      aiTradeWeek(L);
       L.week++;
       if (L.week > weeksOf(L)) startPlayoffs(L);
     }

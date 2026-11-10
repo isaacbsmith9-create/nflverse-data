@@ -180,7 +180,7 @@ function jerseyNum(pos) {
 
 function marketSalary(p) {
   const base = Math.pow(clamp((p.ovr - 55) / 44, 0, 1), 2.6);
-  let ageF = p.age <= 27 ? 1 : p.age <= 30 ? 0.85 : p.age <= 32 ? 0.6 : 0.4;
+  let ageF = p.age <= 27 ? 1 : p.age <= 30 ? 0.95 : p.age <= 32 ? 0.8 : p.age <= 34 ? 0.55 : 0.35;
   const sal = 0.8 + base * 52 * POS_SAL[p.pos] * ageF;
   return Math.round(sal * 100) / 100;
 }

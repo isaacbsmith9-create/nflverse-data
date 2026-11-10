@@ -37,9 +37,11 @@ function newRealLeague(userAbbr, opts = {}) {
     const p = genPlayer(L, pos, ovr, age);
     p.first = first; p.last = last; p.num = num || jerseyNum(pos); p.dev = dev; p.col = col || '—';
     p.con = { sal: Math.max(0.75, sal), yrs: Math.max(1, yrs) };
+    const estimate = sal < 0;
     const locked = ov || {};
     for (const k in locked) p.r[k] = locked[k];
     fitOvr(p, ovr, locked);
+    if (estimate) p.con = { sal: Math.round(marketSalary(p) * rand(0.85, 1.15) * 100) / 100, yrs: randi(1, 4) };
     const upside = Math.max(0, 27 - age) * rand(0.8, 2.6) + (dev === 'X' ? 5 : dev === 'S' ? 2 : 0);
     p.pot = Math.round(clamp(p.ovr + upside + gauss(0, 2), p.ovr, 99));
     p.rookie = exp === 0; p.inj = inj || 0; p.ir = !!inj;

@@ -230,3 +230,19 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
   .trade-grid { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { .banner { animation: none; } }
+
+/* ---- player card + badges ---- */
+.pcard { background: linear-gradient(110deg, var(--tc) 0%, transparent 70%); margin: -20px -20px 0; padding: 20px; border-radius: 14px 14px 0 0; }
+.shield { width: 76px; height: 86px; display: grid; place-items: center; align-content: center; clip-path: polygon(50% 0, 100% 14%, 100% 64%, 50% 100%, 0 64%, 0 14%); flex: none; }
+.shield b { font: 800 38px/1 var(--f-display); }
+.shield span { font: 700 11px/1 var(--f-body); letter-spacing: .14em; opacity: .8; }
+.pos-chip { background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.25); border-radius: 6px; padding: 2px 8px; font: 800 13px/1.3 var(--f-display); letter-spacing: .06em; }
+.devb { display: inline-block; border-radius: 6px; padding: 2px 8px; font: 800 12px/1.4 var(--f-display); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.devb.dev-X { background: linear-gradient(135deg, #ffe27a, #ff9f1c); color: #2a1600; box-shadow: 0 0 12px rgba(255,184,28,.55); }
+.devb.dev-S { background: #2b6c96; color: #e6f6ff; }
+.rings { display: flex; gap: 10px; }
+.ring { --v: 70; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; align-content: center;
+  background: radial-gradient(closest-side, var(--bg2) 76%, transparent 78% 100%), conic-gradient(var(--amber) calc((var(--v) - 40) * 1.6667%), rgba(255,255,255,.12) 0); }
+.ring b { font: 800 19px/1 var(--f-display); }
+.ring span { font: 700 9px/1 var(--f-body); letter-spacing: .12em; color: var(--muted); }
+@media (max-width: 640px) { .rings { display: none; } }

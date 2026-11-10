@@ -235,6 +235,22 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
 }
 @media (prefers-reduced-motion: reduce) { .banner { animation: none; } }
 
+/* ---- player card + badges ---- */
+.pcard { background: linear-gradient(110deg, var(--tc) 0%, transparent 70%); margin: -20px -20px 0; padding: 20px; border-radius: 14px 14px 0 0; }
+.shield { width: 76px; height: 86px; display: grid; place-items: center; align-content: center; clip-path: polygon(50% 0, 100% 14%, 100% 64%, 50% 100%, 0 64%, 0 14%); flex: none; }
+.shield b { font: 800 38px/1 var(--f-display); }
+.shield span { font: 700 11px/1 var(--f-body); letter-spacing: .14em; opacity: .8; }
+.pos-chip { background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.25); border-radius: 6px; padding: 2px 8px; font: 800 13px/1.3 var(--f-display); letter-spacing: .06em; }
+.devb { display: inline-block; border-radius: 6px; padding: 2px 8px; font: 800 12px/1.4 var(--f-display); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.devb.dev-X { background: linear-gradient(135deg, #ffe27a, #ff9f1c); color: #2a1600; box-shadow: 0 0 12px rgba(255,184,28,.55); }
+.devb.dev-S { background: #2b6c96; color: #e6f6ff; }
+.rings { display: flex; gap: 10px; }
+.ring { --v: 70; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; align-content: center;
+  background: radial-gradient(closest-side, var(--bg2) 76%, transparent 78% 100%), conic-gradient(var(--amber) calc((var(--v) - 40) * 1.6667%), rgba(255,255,255,.12) 0); }
+.ring b { font: 800 19px/1 var(--f-display); }
+.ring span { font: 700 9px/1 var(--f-body); letter-spacing: .12em; color: var(--muted); }
+@media (max-width: 640px) { .rings { display: none; } }
+
 </style>
 <section id="menu" class="screen">
   <div class="menu-inner wrap">
@@ -304,6 +320,7 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
       <div class="row">
         <button class="btn primary" data-act="resume">Resume</button>
         <button class="btn" data-act="sim-game-rest">Sim rest of game</button>
+        <button class="btn" data-act="toggle-cam">Switch camera</button>
         <button class="btn" data-act="toggle-touch">Toggle touch controls</button>
         <button class="btn" data-act="toggle-sound">Toggle sound</button>
       </div>
@@ -499,7 +516,7 @@ function jerseyNum(pos) {
 
 function marketSalary(p) {
   const base = Math.pow(clamp((p.ovr - 55) / 44, 0, 1), 2.6);
-  let ageF = p.age <= 27 ? 1 : p.age <= 30 ? 0.85 : p.age <= 32 ? 0.6 : 0.4;
+  let ageF = p.age <= 27 ? 1 : p.age <= 30 ? 0.95 : p.age <= 32 ? 0.8 : p.age <= 34 ? 0.55 : 0.35;
   const sal = 0.8 + base * 52 * POS_SAL[p.pos] * ageF;
   return Math.round(sal * 100) / 100;
 }
@@ -786,6 +803,7 @@ function simWeek(L, includeUser = true) {
       }
       injuriesTick(L, played);
       aiRosterMoves(L);
+      aiTradeWeek(L);
       L.week++;
       if (L.week > weeksOf(L)) startPlayoffs(L);
     }
@@ -1179,6 +1197,107 @@ function saveMeta(slot) {
 function deleteSave(slot) { try { localStorage.removeItem(SAVE_PREFIX + slot); } catch (e) { } }
 
 // ============================================================
+// Gridiron Dynasty - league moves: trade finder, CPU-to-CPU trades,
+// free-agent contract negotiation
+// ============================================================
+'use strict';
+
+const sideValue = (L, side) => side.players.reduce((s, id) => s + playerValue(L.players[id]), 0) + side.picks.reduce((s, pk) => s + pickValue(L, pk), 0);
+
+// What would each team give for the package the user is offering?
+function findOffers(L, give, maxOffers = 8) {
+  const want = sideValue(L, give);
+  if (want <= 0) return [];
+  const offers = [];
+  const givePos = new Set(give.players.map(id => L.players[id].pos));
+  for (const t of L.teams) {
+    if (t.id === L.userTid) continue;
+    const budget = want / 1.1; // they need to win the deal by ~10%
+    // their tradeable assets: skip their single best starter at each position the user isn't sending
+    const assets = t.roster.map(id => L.players[id]).filter(p => !p.ir && p.ovr >= 55)
+      .map(p => ({ kind: 'player', id: p.id, v: playerValue(p), p }))
+      .concat(L.picks.filter(pk => pk.owner === t.id).map(pk => ({ kind: 'pick', pk, v: pickValue(L, pk) })))
+      .filter(a => a.v <= budget * 1.02 && a.v > budget * 0.08)
+      .sort((a, b) => b.v - a.v);
+    // need: favour giving players at positions where they're deep
+    const pkg = { players: [], picks: [] }; let tot = 0;
+    for (const a of assets) {
+      if (tot + a.v > budget * 1.02) continue;
+      if (a.kind === 'player' && givePos.has(a.p.pos) && chance(0.5)) continue;
+      if (a.kind === 'player') pkg.players.push(a.id); else pkg.picks.push(a.pk);
+      tot += a.v;
+      if (tot >= budget * 0.8 || pkg.players.length + pkg.picks.length >= 3) break;
+    }
+    if (!pkg.players.length && !pkg.picks.length) continue;
+    const ev = tradeEval(L, t.id, give, pkg);
+    if (!ev.ok) continue;
+    offers.push({ tid: t.id, get: pkg, value: sideValue(L, pkg) });
+  }
+  return offers.sort((a, b) => b.value - a.value).slice(0, maxOffers);
+}
+
+// occasional CPU-to-CPU trades before the deadline
+function aiTradeWeek(L) {
+  if (L.phase !== 'regular' || L.week > 10 || !chance(0.35)) return;
+  const teams = shuffle(L.teams.filter(t => t.id !== L.userTid).slice());
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const A = teams[attempt * 2 % teams.length], B = teams[(attempt * 2 + 1) % teams.length];
+    // A targets a starter-level player at its weakest position
+    const pos = POSITIONS.filter(p => p !== 'K' && p !== 'P').sort((x, y) => needScore(L, A, y) - needScore(L, A, x))[0];
+    const target = B.roster.map(id => L.players[id]).filter(p => p.pos === pos && !p.ir && p.ovr >= 72).sort((a, b) => b.ovr - a.ovr)[1]; // B keeps its best
+    if (!target) continue;
+    const need = playerValue(target) * 1.1;
+    const pool = A.roster.map(id => L.players[id]).filter(p => p.pos !== pos && !p.ir)
+      .map(p => ({ kind: 'player', id: p.id, v: playerValue(p) }))
+      .concat(L.picks.filter(pk => pk.owner === A.id).map(pk => ({ kind: 'pick', pk, v: pickValue(L, pk) })))
+      .sort((a, b) => b.v - a.v);
+    const pkg = { players: [], picks: [] }; let tot = 0;
+    for (const a of pool) { if (tot >= need) break; if (a.v > need * 1.3) continue; if (a.kind === 'player') pkg.players.push(a.id); else pkg.picks.push(a.pk); tot += a.v; if (pkg.players.length + pkg.picks.length >= 3) break; }
+    if (tot < need || tot > need * 1.5) continue;
+    const salIn = playerValue && target.con.sal, salOut = pkg.players.reduce((s, id) => s + L.players[id].con.sal, 0);
+    if (capRoom(L, A) + salOut - salIn < 0 || capRoom(L, B) + salIn - salOut < 0) continue;
+    for (const id of pkg.players) { const p = L.players[id]; removeFromTeam(L, p); addToTeam(L, p, B.id); }
+    removeFromTeam(L, target); addToTeam(L, target, A.id);
+    for (const pk of pkg.picks) pk.owner = B.id;
+    const names = pkg.players.map(id => `${L.players[id].pos} ${pshort(L.players[id])}`).concat(pkg.picks.map(pk => pickLabel(L, pk))).join(', ');
+    addNews(L, `TRADE: ${A.abbr} acquire ${target.pos} ${pname(target)} (${target.ovr}) from ${B.abbr} for ${names}.`);
+    autoDepth(L, A); autoDepth(L, B);
+    return;
+  }
+}
+
+// ---------- free-agent negotiation ----------
+// interest: how much a player likes your team (winning + playing time)
+function faInterest(L, p, tid) {
+  const t = L.teams[tid];
+  const win = (t.w + t.l) ? pct(t) : 0.5;
+  const depth = t.roster.map(id => L.players[id]).filter(x => x.pos === p.pos && x.ovr > p.ovr).length;
+  const playing = depth < STARTERS[p.pos] ? 1 : depth < STARTERS[p.pos] + 2 ? 0.6 : 0.3;
+  return clamp(0.35 + win * 0.35 + playing * 0.3, 0, 1);
+}
+function faRivals(L, p) {
+  if (L.phase !== 'fa') return 0;
+  return L.teams.filter(t => t.id !== L.userTid && capRoom(L, t) > faAsk(p) && needScore(L, t, p.pos) > 8).length;
+}
+// returns { ok, msg }
+function negotiate(L, p, sal, yrs) {
+  const ask = faAsk(p);
+  p.neg = p.neg || { tries: 0, mood: 1 };
+  if (p.neg.tries >= 3 && p.neg.mood <= 0.5) return { ok: false, msg: `${pshort(p)} has stopped taking your calls.` };
+  p.neg.tries++;
+  const interest = faInterest(L, p, L.userTid);
+  // longer deals: young players like security, vets want shorter if old
+  const yrPref = p.age >= 31 ? (yrs <= 2 ? 1.03 : 0.95) : (yrs >= 3 ? 1.04 : 0.98);
+  const ratio = sal / ask * yrPref * (0.9 + interest * 0.2) * (p.neg.mood);
+  const rivals = faRivals(L, p);
+  const need = 1 + Math.min(0.12, rivals * 0.02);
+  if (ratio >= need) return { ok: true, msg: `${pname(p)} accepted!` };
+  if (ratio >= need * 0.9) { p.neg.mood = Math.max(0.6, p.neg.mood - 0.08); return { ok: false, msg: `Close. ${pshort(p)}'s agent wants a bit more${rivals ? ` — ${rivals} other team${rivals > 1 ? 's are' : ' is'} interested` : ''}.` }; }
+  p.neg.mood = Math.max(0.45, p.neg.mood - 0.2);
+  return { ok: false, msg: `${pshort(p)} found that offer insulting. Asking: ${fmtMoney(ask)}/yr.` };
+}
+
+// ============================================================
 // Gridiron Dynasty - real NFL league loader (uses NFL_DATA from nfl_data.js when present)
 // ============================================================
 'use strict';
@@ -1217,9 +1336,11 @@ function newRealLeague(userAbbr, opts = {}) {
     const p = genPlayer(L, pos, ovr, age);
     p.first = first; p.last = last; p.num = num || jerseyNum(pos); p.dev = dev; p.col = col || '—';
     p.con = { sal: Math.max(0.75, sal), yrs: Math.max(1, yrs) };
+    const estimate = sal < 0;
     const locked = ov || {};
     for (const k in locked) p.r[k] = locked[k];
     fitOvr(p, ovr, locked);
+    if (estimate) p.con = { sal: Math.round(marketSalary(p) * rand(0.85, 1.15) * 100) / 100, yrs: randi(1, 4) };
     const upside = Math.max(0, 27 - age) * rand(0.8, 2.6) + (dev === 'X' ? 5 : dev === 'S' ? 2 : 0);
     p.pot = Math.round(clamp(p.ovr + upside + gauss(0, 2), p.ovr, 99));
     p.rookie = exp === 0; p.inj = inj || 0; p.ir = !!inj;
@@ -2612,6 +2733,271 @@ function sfx(kind) {
 }
 
 // ============================================================
+// Gridiron Dynasty - broadcast camera renderer
+// Perspective view from behind the offense: downfield = up the screen,
+// the offense's right (+y) = screen right. Players drawn as animated figures.
+// ============================================================
+'use strict';
+
+LiveGame.prototype.render2D = LiveGame.prototype.render;
+LiveGame.prototype.render = function (ctx, W, H) {
+  if (this.camMode === 'top') return this.render2D(ctx, W, H);
+  return this.render3D(ctx, W, H);
+};
+
+// project ground point (x, y) at height h (yards) -> screen
+LiveGame.prototype.proj = function (x, y, h = 0) {
+  const c = this.c3; const z = x - c.camX;
+  if (z < 0.9) return null;
+  const s = c.F / z;
+  return { x: c.W / 2 + (y - c.camY) * s, y: c.hor + (c.camH - h) * s, k: s, z };
+};
+
+let _crowdCache = null;
+function crowdCanvas(W, Hh, c1, c2) {
+  const key = W + 'x' + Hh + c1 + c2;
+  if (_crowdCache && _crowdCache.key === key) return _crowdCache.cv;
+  const cv = (typeof OffscreenCanvas !== 'undefined') ? new OffscreenCanvas(Math.max(1, W), Math.max(1, Hh)) : Object.assign(document.createElement('canvas'), { width: W, height: Hh });
+  const g = cv.getContext('2d');
+  const grd = g.createLinearGradient(0, 0, 0, Hh);
+  grd.addColorStop(0, '#05080d'); grd.addColorStop(0.55, '#101722'); grd.addColorStop(1, '#1a2230');
+  g.fillStyle = grd; g.fillRect(0, 0, W, Hh);
+  // stadium lights
+  for (let i = 0; i < 6; i++) {
+    const lx = (i + 0.5) * W / 6, ly = Hh * 0.08;
+    const rg = g.createRadialGradient(lx, ly, 0, lx, ly, W * 0.12);
+    rg.addColorStop(0, 'rgba(255,250,225,.55)'); rg.addColorStop(1, 'rgba(255,250,225,0)');
+    g.fillStyle = rg; g.fillRect(lx - W * 0.12, 0, W * 0.24, Hh * 0.5);
+  }
+  // fans: rows of dots, bigger toward the bottom; sprinkle home colors
+  const palette = [c1, c2, c1, '#d9d9d9', '#8a8f99', '#c7b9a6', c1, '#3b4250'];
+  for (let row = 0; row < 26; row++) {
+    const t = row / 25, y = Hh * (0.22 + t * 0.72), r = 1 + t * 2.6, gap = r * 2.6;
+    for (let x = (row % 2) * gap / 2; x < W; x += gap) {
+      g.globalAlpha = 0.35 + t * 0.6;
+      g.fillStyle = palette[(Math.random() * palette.length) | 0];
+      g.beginPath(); g.arc(x + Math.random() * 1.5, y + Math.random() * 1.5, r, 0, Math.PI * 2); g.fill();
+    }
+  }
+  g.globalAlpha = 1;
+  // advertising-free wall band in team colors
+  g.fillStyle = c1; g.fillRect(0, Hh - Math.max(6, Hh * 0.07), W, Math.max(6, Hh * 0.07));
+  g.fillStyle = c2; g.fillRect(0, Hh - Math.max(6, Hh * 0.07), W, 2);
+  _crowdCache = { key, cv };
+  return cv;
+}
+
+LiveGame.prototype.render3D = function (ctx, W, H) {
+  const gs = this.gs;
+  const F = Math.min(0.31 * W, 0.6 * H), hor = H * 0.2;
+  const nearZ = 10, camH = (H * 0.97 - hor) * nearZ / F;
+  const cy = clamp(this.cam.y, MID_Y - 12, MID_Y + 12);
+  // pull back while the QB is in the pocket / pre-snap, tighten up once the ball is out
+  const pocket = this.phase === 'pre' || this.phase === 'call' || (this.phase === 'live' && this.carrier() === (this.O && this.O.QB) && !this.play.crossed);
+  this.backT = (this.backT == null ? 28 : this.backT) + ((pocket ? 28 : 19) - (this.backT == null ? 28 : this.backT)) * 0.06;
+  this.c3 = { F, hor, camH, W, H, camX: this.cam.x - this.backT, camY: this.c3 ? this.c3.camY + (cy - this.c3.camY) * 0.08 : cy };
+  const P = (x, y, h) => this.proj(x, y, h);
+  const homeT = this.teamOf(0);
+  // ---- sky + crowd ----
+  ctx.drawImage(crowdCanvas(Math.ceil(W), Math.ceil(hor + 2), homeT.c1, homeT.c2), 0, 0);
+  // ---- ground (sideline area) ----
+  ctx.fillStyle = '#1b4d26'; ctx.fillRect(0, hor, W, H - hor);
+  const poly = (pts, fill) => {
+    const pp = []; for (const [x, y] of pts) { const p = P(x, y); if (!p) return; pp.push(p); }
+    ctx.fillStyle = fill; ctx.beginPath(); ctx.moveTo(pp[0].x, pp[0].y); for (let i = 1; i < pp.length; i++) ctx.lineTo(pp[i].x, pp[i].y); ctx.closePath(); ctx.fill();
+  };
+  const x0 = this.c3.camX + 1;
+  // field stripes (clip each band at the near plane)
+  for (let x = 0; x < 120; x += 5) {
+    const a = Math.max(x, x0), b = x + 5; if (b <= a) continue;
+    let col;
+    if (x < 10) col = this.teamOf(gs.poss).c1; else if (x >= 110) col = this.teamOf(1 - gs.poss).c1;
+    else col = ((x - 10) / 5) % 2 ? '#2f8a3e' : '#2a7d38';
+    poly([[a, 0], [a, FIELD_W], [b, FIELD_W], [b, 0]], col);
+  }
+  // far stands behind the end zone sit on the horizon already; draw a dark apron beyond the back line
+  // painted ground line: a thin quad in world space, so it narrows correctly with distance
+  const line = (xa, ya, xb, yb, w, col) => {
+    const zmin = this.c3.camX + 1;
+    if (xa < zmin && xb < zmin) return;
+    if (xa < zmin) { const t = (zmin - xa) / (xb - xa); ya += (yb - ya) * t; xa = zmin; }
+    if (xb < zmin) { const t = (zmin - xb) / (xa - xb); yb += (ya - yb) * t; xb = zmin; }
+    const dx = xb - xa, dy = yb - ya, m = Math.hypot(dx, dy) || 1, nx = -dy / m * w / 2, ny = dx / m * w / 2;
+    const q = [P(xa + nx, ya + ny), P(xb + nx, yb + ny), P(xb - nx, yb - ny), P(xa - nx, ya - ny)];
+    if (q.some(v => !v)) return;
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y); for (let i = 1; i < 4; i++) ctx.lineTo(q[i].x, q[i].y); ctx.closePath(); ctx.fill();
+  };
+  const chalk = 'rgba(255,255,255,.88)';
+  for (let x = Math.max(0, Math.ceil(x0 / 5) * 5); x <= 120; x += 5) line(x, 0, x, FIELD_W, 0.12, chalk);
+  line(Math.max(0, x0), 0, 120, 0, 0.15, chalk); line(Math.max(0, x0), FIELD_W, 120, FIELD_W, 0.15, chalk);
+  for (let x = Math.max(11, Math.ceil(x0)); x < 110; x++) {
+    if (x % 5 === 0) continue;
+    for (const hy of [0.6, HASH_L, HASH_R, FIELD_W - 0.6]) line(x, hy - 0.4, x, hy + 0.4, 0.09, 'rgba(255,255,255,.7)');
+  }
+  // squashed ground text
+  const groundText = (txt, x, y, sizeYds, col, rot) => {
+    const p = P(x, y); if (!p || p.k < 1.5) return;
+    ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1, Math.min(0.55, 4.5 / p.z + 0.12)); if (rot) ctx.rotate(rot);
+    ctx.fillStyle = col; ctx.font = `800 ${Math.round(sizeYds * p.k)}px 'Saira Condensed', system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(txt, 0, 0); ctx.restore();
+  };
+  for (let x = 20; x <= 100; x += 10) {
+    if (x < x0 + 2) continue;
+    const n = x <= 60 ? x - 10 : 110 - x;
+    groundText(String(n), x, 9, 2.2, 'rgba(255,255,255,.85)');
+    groundText(String(n), x, FIELD_W - 9, 2.2, 'rgba(255,255,255,.85)');
+  }
+  if (60 > x0 + 3) { // midfield emblem
+    const p = P(60, MID_Y);
+    if (p) { ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1, Math.min(0.55, 4.5 / p.z + 0.12)); ctx.fillStyle = homeT.c1; ctx.strokeStyle = homeT.c2; ctx.lineWidth = 0.35 * p.k;
+      ctx.beginPath(); ctx.arc(0, 0, 4.2 * p.k, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = homeT.c2; ctx.font = `800 ${Math.round(3.2 * p.k)}px 'Saira Condensed', system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(homeT.abbr, 0, 0.2 * p.k); ctx.restore(); }
+  }
+  if (115 > x0) groundText(this.teamOf(1 - gs.poss).name.toUpperCase(), 115, MID_Y, 5, 'rgba(255,255,255,.9)');
+  if (5 > x0 + 1) groundText(this.teamOf(gs.poss).name.toUpperCase(), 5, MID_Y, 5, 'rgba(255,255,255,.9)');
+  // goal posts at the far end
+  const gp = P(120, MID_Y);
+  if (gp) {
+    const k = gp.k; const base = P(120, MID_Y, 3.3), lt = P(120, MID_Y - 3.1, 3.3), rt = P(120, MID_Y + 3.1, 3.3), lu = P(120, MID_Y - 3.1, 11), ru = P(120, MID_Y + 3.1, 11);
+    ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = Math.max(2, 0.25 * k); ctx.beginPath();
+    ctx.moveTo(gp.x, gp.y); ctx.lineTo(base.x, base.y); ctx.moveTo(lt.x, lt.y); ctx.lineTo(rt.x, rt.y); ctx.moveTo(lt.x, lt.y); ctx.lineTo(lu.x, lu.y); ctx.moveTo(rt.x, rt.y); ctx.lineTo(ru.x, ru.y); ctx.stroke();
+  }
+  // LOS + first down
+  if (['pre', 'live', 'call', 'kick'].includes(this.phase)) {
+    const los = this.los || 10 + gs.yard;
+    line(los, 0, los, FIELD_W, 0.35, 'rgba(70,150,255,.95)');
+    const fd = this.firstX || Math.min(110, los + gs.togo);
+    if (fd < 110) line(fd, 0, fd, FIELD_W, 0.35, 'rgba(255,214,0,.95)');
+  }
+  // route art
+  const showArt = this.userOnOffense() && (this.phase === 'pre' || (this.phase === 'live' && this.t < 0.8));
+  if (showArt && this.O) {
+    for (const k of ['WR1', 'WR2', 'WR3', 'TE', 'RB']) {
+      const e = this.O[k]; const tk = e.task;
+      const pts = tk.k === 'route' || tk.k === 'path' ? tk.pts : null; if (!pts) continue;
+      const col = tk.k === 'path' ? 'rgba(255,255,255,.9)' : RCOL[this.eligible.indexOf(e)] || '#fff';
+      let prev = [e.x, e.y];
+      for (const q of pts) { line(prev[0], prev[1], Math.min(q[0], 118), q[1], 0.35, col); prev = q; }
+      const last = pts[pts.length - 1], lp = P(Math.min(last[0], 118), last[1]);
+      if (lp) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(lp.x, lp.y, Math.max(3, 0.45 * lp.k), 0, Math.PI * 2); ctx.fill(); }
+    }
+  }
+  // ---- players (far to near) ----
+  const ents = this.ents.slice().sort((a, b) => b.x - a.x);
+  const carrier = this.carrier();
+  for (const e of ents) {
+    const p = P(e.x, e.y); if (!p) continue;
+    const side = e.side === 'O' ? gs.poss : 1 - gs.poss;
+    const sp = Math.hypot(e.vx, e.vy); e.phase = (e.phase || Math.random() * 6) + sp * 0.03;
+    drawFigure(ctx, p.x, p.y, p.k, e, this.teamOf(side), side === 0, sp, e === this.ctrl, e === carrier && this.ball && this.ball.state === 'held');
+  }
+  // receiver icons
+  if (this.phase === 'live' && this.userOnOffense() && this.offPlay.type === 'pass' && !this.play.thrown && this.carrier() === this.O.QB && !this.play.crossed) {
+    this.eligible.forEach((e, i) => {
+      const p = P(e.x, e.y, 2.75); if (!p) return; const r = Math.max(9, 0.42 * p.k);
+      ctx.fillStyle = RCOL[i]; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#111'; ctx.font = `800 ${Math.round(r * 1.25)}px 'Saira Condensed', system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), p.x, p.y + 1);
+    });
+  }
+  // ball in flight
+  const b = this.ball;
+  if (b && b.state === 'air') {
+    const sh = P(b.x, b.y), p = P(b.x, b.y, 1.3 + b.z);
+    if (sh) { ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(sh.x, sh.y, 0.3 * sh.k, 0.1 * sh.k, 0, 0, Math.PI * 2); ctx.fill(); }
+    if (p) { drawBall(ctx, p.x, p.y, Math.max(3, 0.32 * p.k), this.t2 * 14); }
+  }
+  // floating text
+  for (const f of this.effects) {
+    f.t += 1 / 60; if (f.t > 1.2) continue;
+    const p = P(f.x, f.y, 3 + f.t * 2); if (!p) continue;
+    ctx.globalAlpha = 1 - f.t / 1.2; ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 4;
+    ctx.font = `800 italic ${Math.round(clamp(p.k * 1.1, 14, 34))}px 'Saira Condensed', system-ui`; ctx.textAlign = 'center';
+    ctx.strokeText(f.txt, p.x, p.y); ctx.fillText(f.txt, p.x, p.y); ctx.globalAlpha = 1;
+  }
+  this.effects = this.effects.filter(f => f.t <= 1.2);
+  if (this.phase === 'kick') this.renderKick(ctx, W, H);
+};
+
+function drawBall(ctx, x, y, r, spin) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(spin) * 0.25 - 0.6);
+  ctx.fillStyle = '#7a3d14'; ctx.beginPath(); ctx.ellipse(0, 0, r * 1.5, r, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1, r * 0.18); ctx.beginPath(); ctx.moveTo(-r * 0.5, 0); ctx.lineTo(r * 0.5, 0); ctx.stroke();
+  ctx.restore();
+}
+
+// one player figure, feet at (X, Y), k = pixels per yard at that depth
+function drawFigure(ctx, X, Y, k, e, team, home, sp, selected, hasBall) {
+  const jersey = home ? team.c1 : '#f2f2f2', trim = home ? team.c2 : team.c1, pants = home ? '#e9e9e9' : team.c1;
+  const helmet = team.c1, skin = '#8d5a3b';
+  const run = Math.min(1, sp / 4), st = Math.sin(e.phase || 0) * run;
+  const down = e.stun > 0 ? 1 : 0;
+  // ring under the selected player
+  if (selected) {
+    ctx.strokeStyle = '#ffe14d'; ctx.lineWidth = Math.max(2, 0.12 * k);
+    ctx.beginPath(); ctx.ellipse(X, Y, 0.85 * k, 0.3 * k, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.32)'; ctx.beginPath(); ctx.ellipse(X + 0.12 * k, Y, 0.55 * k, 0.18 * k, 0, 0, Math.PI * 2); ctx.fill();
+  if (k < 6) { // far away: simple token
+    ctx.fillStyle = jersey; ctx.fillRect(X - 0.35 * k, Y - 1.7 * k, 0.7 * k, 1.2 * k);
+    ctx.fillStyle = pants; ctx.fillRect(X - 0.3 * k, Y - 0.6 * k, 0.6 * k, 0.6 * k);
+    ctx.fillStyle = helmet; ctx.beginPath(); ctx.arc(X, Y - 1.85 * k, 0.26 * k, 0, Math.PI * 2); ctx.fill();
+    if (selected) { ctx.fillStyle = '#ffe14d'; ctx.beginPath(); ctx.moveTo(X, Y - 2.25 * k); ctx.lineTo(X - 4, Y - 2.25 * k - 7); ctx.lineTo(X + 4, Y - 2.25 * k - 7); ctx.fill(); }
+    return;
+  }
+  ctx.save();
+  if (down) { ctx.translate(X, Y); ctx.rotate(0.9); ctx.translate(-X, -Y + 0.3 * k); }
+  const hipY = Y - 0.95 * k;
+  // legs
+  ctx.lineCap = 'round'; ctx.strokeStyle = pants; ctx.lineWidth = 0.24 * k;
+  const leg = (dx, s) => { ctx.beginPath(); ctx.moveTo(X + dx, hipY); ctx.lineTo(X + dx + s * 0.18 * k, hipY + 0.5 * k - Math.max(0, s) * 0.12 * k); ctx.lineTo(X + dx + s * 0.1 * k, Y - Math.max(0, s) * 0.25 * k); ctx.stroke(); };
+  leg(-0.14 * k, st); leg(0.14 * k, -st);
+  ctx.fillStyle = '#111'; // cleats
+  ctx.fillRect(X - 0.24 * k + st * 0.1 * k, Y - 0.08 * k - Math.max(0, st) * 0.25 * k, 0.2 * k, 0.1 * k);
+  ctx.fillRect(X + 0.04 * k - st * 0.1 * k, Y - 0.08 * k - Math.max(0, -st) * 0.25 * k, 0.2 * k, 0.1 * k);
+  // torso
+  const tTop = Y - 1.62 * k, tH = 0.72 * k;
+  ctx.fillStyle = jersey; roundRect(ctx, X - 0.36 * k, tTop, 0.72 * k, tH, 0.12 * k); ctx.fill();
+  // shoulder pads
+  ctx.beginPath(); ctx.ellipse(X, tTop + 0.05 * k, 0.5 * k, 0.16 * k, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = trim; ctx.fillRect(X - 0.36 * k, tTop + tH - 0.08 * k, 0.72 * k, 0.06 * k);
+  // arms
+  ctx.strokeStyle = jersey; ctx.lineWidth = 0.18 * k;
+  const arm = (dx, s) => { ctx.beginPath(); ctx.moveTo(X + dx, tTop + 0.1 * k); ctx.lineTo(X + dx * 1.25, tTop + 0.4 * k + s * 0.1 * k); ctx.stroke(); ctx.strokeStyle = skin; ctx.beginPath(); ctx.moveTo(X + dx * 1.25, tTop + 0.4 * k + s * 0.1 * k); ctx.lineTo(X + dx * 1.15 - s * 0.12 * k, tTop + 0.68 * k); ctx.stroke(); ctx.strokeStyle = jersey; };
+  arm(-0.45 * k, -st); arm(0.45 * k, st);
+  // number
+  if (k >= 11) {
+    ctx.fillStyle = home ? '#fff' : team.c1; ctx.strokeStyle = trim; ctx.lineWidth = Math.max(1, 0.04 * k);
+    ctx.font = `800 ${Math.round(0.42 * k)}px 'Saira Condensed', system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.strokeText(String(e.p.num), X, tTop + tH * 0.5); ctx.fillText(String(e.p.num), X, tTop + tH * 0.5);
+  }
+  // helmet
+  const hy = Y - 1.86 * k, hr = 0.25 * k;
+  ctx.fillStyle = helmet; ctx.beginPath(); ctx.arc(X, hy, hr, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = team.c2; ctx.lineWidth = Math.max(1, 0.06 * k); ctx.beginPath(); ctx.moveTo(X, hy - hr); ctx.lineTo(X, hy + hr * 0.6); ctx.stroke();
+  if (e.side === 'D') { ctx.strokeStyle = '#bbb'; ctx.lineWidth = Math.max(1, 0.04 * k); ctx.beginPath(); ctx.moveTo(X - hr * 0.6, hy + hr * 0.35); ctx.lineTo(X + hr * 0.6, hy + hr * 0.35); ctx.stroke(); }
+  if (hasBall) drawBall(ctx, X + 0.3 * k, tTop + 0.4 * k, 0.17 * k, 0);
+  ctx.restore();
+  if (selected) { ctx.fillStyle = '#ffe14d'; ctx.beginPath(); const ty = Y - 2.3 * k; ctx.moveTo(X, ty); ctx.lineTo(X - 0.22 * k, ty - 0.3 * k); ctx.lineTo(X + 0.22 * k, ty - 0.3 * k); ctx.fill(); }
+}
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+}
+
+// tap-to-throw in broadcast view
+LiveGame.prototype.receiverAt2D = LiveGame.prototype.receiverAt;
+LiveGame.prototype.receiverAt = function (px, py) {
+  if (this.camMode === 'top' || !this.c3) return this.receiverAt2D(px, py);
+  let best = null, bd = 1e9;
+  for (const e of this.eligible || []) {
+    const p = this.proj(e.x, e.y, 1.2); if (!p) continue;
+    const d = Math.hypot(p.x - px, p.y - py);
+    if (d < Math.max(40, p.k * 1.6) && d < bd) { bd = d; best = e; }
+  }
+  return best;
+};
+
+// ============================================================
 // Gridiron Dynasty - UI: menus, franchise hub, game screen
 // ============================================================
 'use strict';
@@ -2695,6 +3081,7 @@ function renderHub() {
   document.documentElement.style.setProperty('--tc1', t.c1);
   $('#hubHead').innerHTML = `<div class="wrap">${badge(t, 'lg')}<div class="grow"><div class="hub-title">${esc(teamName(t))}</div>
     <div class="hub-sub">${t.coach ? 'Head coach ' + esc(t.coach) + ' · ' : ''}${L.season} · ${phaseLabel(L.phase, L.week)} · <b class="num">${recStr(t)}</b> · OVR ${o.ovr} (OFF ${o.off} / DEF ${o.def}) · Cap room <b class="num">${fmtMoney(capRoom(L, t))}</b> · Roster ${activeCount(L, t)}/53${t.roster.length > activeCount(L, t) ? ` (+${t.roster.length - activeCount(L, t)} IR)` : ''}</div></div>
+    <div class="rings">${[['OVR', o.ovr], ['OFF', o.off], ['DEF', o.def]].map(([n, v]) => `<div class="ring" style="--v:${v}"><b>${v}</b><span>${n}</span></div>`).join('')}</div>
     <button class="btn sm ghost" data-act="menu">Menu</button></div>`;
   const dotTab = { home: ['recap', 'resign', 'fa', 'draft'].includes(L.phase), draft: L.phase === 'draft', fa: L.phase === 'fa' };
   $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${n}${dotTab[k] ? '<span class="dot"></span>' : ''}</button>`).join('');
@@ -2779,7 +3166,7 @@ function viewRoster() {
   const sorters = { pos: (a, b) => POS_ORDER[a.pos] - POS_ORDER[b.pos] || b.ovr - a.ovr, ovr: (a, b) => b.ovr - a.ovr, age: (a, b) => a.age - b.age, sal: (a, b) => b.con.sal - a.con.sal };
   ps.sort(sorters[ROSTER_SORT] || sorters.pos);
   const rows = ps.map(p => `<tr class="click" data-act="player" data-pid="${p.id}"><td>${p.pos}</td><td>#${p.num} ${esc(pname(p))}${p.inj ? ` <span class="inj">${p.ir ? 'IR' : 'INJ'} ${p.inj}w</span>` : ''}${p.rookie ? ' <span class="pill">R</span>' : ''}</td>
-    <td class="r">${p.age}</td><td class="r">${ovrTag(p.ovr)}</td><td class="dev-${p.dev}">${devLabel(p.dev)}</td><td class="r">${fmtMoney(p.con.sal)}</td><td class="r">${p.con.yrs}</td><td class="small muted">${statLine(p)}</td></tr>`).join('');
+    <td class="r">${p.age}</td><td class="r">${ovrTag(p.ovr)}</td><td>${p.dev !== 'N' ? `<span class="devb dev-${p.dev}">${devLabel(p.dev)}</span>` : '<span class="muted small">Normal</span>'}</td><td class="r">${fmtMoney(p.con.sal)}</td><td class="r">${p.con.yrs}</td><td class="small muted">${statLine(p)}</td></tr>`).join('');
   return `<div class="card stack"><div class="row"><h2 class="grow" style="margin:0">Roster</h2>
     <select data-act="roster-filter">${['ALL', ...POSITIONS].map(p => `<option ${p === ROSTER_FILTER ? 'selected' : ''}>${p}</option>`).join('')}</select>
     <select data-act="roster-sort">${[['pos', 'Sort: Position'], ['ovr', 'Sort: OVR'], ['age', 'Sort: Age'], ['sal', 'Sort: Salary']].map(([k, n]) => `<option value="${k}" ${k === ROSTER_SORT ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
@@ -2811,12 +3198,15 @@ function playerModal(pid) {
       ${tradeAllowed(L) ? `<button class="btn sm" data-act="shop" data-pid="${p.id}">Trade him</button>` : ''}
       <button class="btn sm danger" data-act="cut" data-pid="${p.id}">Release</button>`;
   } else if (fa && !prospect) {
-    const ask = faAsk(p);
-    actions = `<label>Years <select id="faYrs">${[1, 2, 3, 4, 5].map(y => `<option ${y === 2 ? 'selected' : ''}>${y}</option>`).join('')}</select></label><button class="btn sm primary" data-act="sign" data-pid="${p.id}">Sign for ${fmtMoney(ask)}/yr</button>`;
+    const ask = faAsk(p), rivals = faRivals(L, p), interest = Math.round(faInterest(L, p, L.userTid) * 100);
+    actions = `<div class="stack" style="width:100%;gap:8px"><div class="small muted">Asking ${fmtMoney(ask)}/yr · Interest in your team ${interest}%${rivals ? ` · ${rivals} rival team${rivals > 1 ? 's' : ''} bidding` : ''}</div>
+      <div class="row"><label>Salary $M/yr <input type="number" id="faSal" step="0.25" min="0.75" value="${ask.toFixed(2)}" style="width:110px"></label>
+      <label>Years <select id="faYrs">${[1, 2, 3, 4, 5].map(y => `<option ${y === 2 ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
+      <button class="btn sm primary" data-act="sign" data-pid="${p.id}">Make offer</button></div><div class="small" id="negMsg"></div></div>`;
   } else if (t && tradeAllowed(L)) actions = `<button class="btn sm" data-act="trade-for" data-pid="${p.id}">Trade for him</button>`;
   const header = prospect ? `${p.col} · Age ${p.age} · Proj. round ${p.proj > 7 ? 'UDFA' : p.proj} · Scouted OVR ${p.scout.lo}–${p.scout.hi} · Potential ${p.scout.potG}`
     : `${t ? esc(teamName(t)) : 'Free agent'} · Age ${p.age} · ${p.col} · ${devLabel(p.dev)} dev${mine ? ` · Potential ${potGrade(p.pot)}` : ''}`;
-  modal(`<div class="modal-head">${prospect ? '' : ovrTag(p.ovr)}<div class="grow"><h2 style="margin:0">#${p.num} ${esc(pname(p))} <span class="muted">${p.pos}</span></h2><div class="muted small">${header}</div></div><button class="btn sm ghost x" data-act="close">✕</button></div>
+  modal(`<div class="modal-head pcard" style="--tc:${t ? t.c1 : '#2a3a34'}">${prospect ? '' : `<div class="shield ${ovrClass(p.ovr)}"><b>${p.ovr}</b><span>OVR</span></div>`}<div class="grow"><div class="row" style="gap:8px"><span class="pos-chip">${p.pos}</span>${p.dev !== 'N' ? `<span class="devb dev-${p.dev}">${devLabel(p.dev)}</span>` : ''}</div><h2 style="margin:4px 0 0">#${p.num} ${esc(pname(p))}</h2><div class="muted small">${header}</div></div><button class="btn sm ghost x" data-act="close">✕</button></div>
     ${!prospect ? `<div class="row small"><span class="pill">Contract ${fmtMoney(p.con.sal)}/yr · ${p.con.yrs} yr${p.con.yrs === 1 ? '' : 's'}</span>${p.inj ? `<span class="pill red">Injured — ${p.inj} wk</span>` : ''}${p.draft ? `<span class="pill">Drafted ${p.draft.season} R${p.draft.round} #${p.draft.pick}</span>` : ''}</div>` : ''}
     <div class="bars">${bars}</div>
     ${p.st && p.st.gp ? `<div><div class="eyebrow">This season (${p.st.gp} games)</div><div>${statLine(p) || '—'}</div></div>` : ''}
@@ -2905,12 +3295,12 @@ function tradeRefresh() {
   const el = $('#tradeSummary'); if (!el) return;
   const L = LEAGUE; const s = tradeSides();
   const empty = !s.give.players.length && !s.give.picks.length && !s.get.players.length && !s.get.picks.length;
-  if (empty) { el.innerHTML = '<div class="muted small">Check players or picks on both sides. The AI accepts deals that give it more value than it sends — young, high-rated players and early picks are worth the most.</div>'; return; }
+  if (empty) { el.innerHTML = '<div class="muted small"><b>Tip:</b> check only your own players and press <b>Find offers</b> to shop them to every team. Or check players or picks on both sides. The AI accepts deals that give it more value than it sends — young, high-rated players and early picks are worth the most.</div>'; return; }
   const ev = tradeEval(L, TRADE.tid, s.give, s.get);
   const pctv = clamp(ev.ratio / 1.08 * 70, 0, 100);
   el.innerHTML = `<div class="stack" style="gap:8px"><div class="row small"><span class="grow">AI interest</span><b>${ev.ok ? 'Will accept' : ev.reason ? 'Blocked' : ev.ratio > 0.85 ? 'Close — add a little more' : 'Not interested'}</b></div>
     <div class="meter"><b style="width:${pctv}%"></b></div>${ev.reason ? `<div class="small" style="color:var(--red)">${esc(ev.reason)}</div>` : ''}
-    <div class="row"><button class="btn primary" data-act="trade-propose" ${ev.ok ? '' : 'disabled'}>Propose trade</button><button class="btn ghost" data-act="trade-clear">Clear</button></div></div>`;
+    <div class="row"><button class="btn primary" data-act="trade-propose" ${ev.ok ? '' : 'disabled'}>Propose trade</button>${s.give.players.length || s.give.picks.length ? '<button class="btn" data-act="trade-finder">Find offers from all teams</button>' : ''}<button class="btn ghost" data-act="trade-clear">Clear</button></div></div>`;
 }
 
 // ---------- free agents ----------
@@ -3043,12 +3433,28 @@ document.addEventListener('click', e => {
     case 'promote': { const p = L.players[+el.dataset.pid]; const t = UT(); fixDepth(L, t); t.depth[p.pos] = [p.id, ...t.depth[p.pos].filter(x => x !== p.id)]; save(); closeModal(); toast(`${pshort(p)} is now the starting ${p.pos}.`); renderHub(); break; }
     case 'cut': { const p = L.players[+el.dataset.pid]; confirmBox(`Release ${pname(p)}? His ${fmtMoney(p.con.sal)} salary comes off your cap.`, () => { releaseToFA(L, p); addNews(L, `Released ${p.pos} ${pname(p)}.`); save(); renderHub(); }); break; }
     case 'sign': {
-      const p = L.players[+el.dataset.pid]; const yrs = +$('#faYrs').value;
-      const err = signFA(L, L.userTid, p, yrs, faAsk(p)); if (err) { toast(err); break; }
-      closeModal(); save(); renderHub(); toast(`Signed ${pname(p)}.`); break;
+      const p = L.players[+el.dataset.pid]; const yrs = +$('#faYrs').value; const sal = Math.max(0.75, +$('#faSal').value || faAsk(p));
+      if (capRoom(L, UT()) < sal) { $('#negMsg').textContent = `You only have ${fmtMoney(capRoom(L, UT()))} in cap room.`; break; }
+      const r = negotiate(L, p, sal, yrs);
+      if (!r.ok) { $('#negMsg').textContent = r.msg; save(); break; }
+      const err = signFA(L, L.userTid, p, yrs, sal); if (err) { $('#negMsg').textContent = err; break; }
+      closeModal(); save(); renderHub(); toast(`Signed ${pname(p)}: ${yrs} yr / ${fmtMoney(sal)} per year.`); break;
     }
     case 'shop': { TRADE = { tid: TRADE.tid, give: { players: [+el.dataset.pid], picks: [] }, get: { players: [], picks: [] } }; TAB = 'trade'; closeModal(); renderHub(); break; }
     case 'trade-for': { const p = L.players[+el.dataset.pid]; TRADE = { tid: p.tid, give: { players: [], picks: [] }, get: { players: [p.id], picks: [] } }; TAB = 'trade'; closeModal(); renderHub(); break; }
+    case 'trade-finder': {
+      const s = tradeSides(); const offers = findOffers(L, s.give); TRADE.offers = offers;
+      const giveTxt = s.give.players.map(id => `${L.players[id].pos} ${esc(pshort(L.players[id]))}`).concat(s.give.picks.map(pk => pickLabel(L, pk))).join(', ');
+      const rows = offers.map((o, i) => { const t = L.teams[o.tid]; const items = o.get.players.map(id => { const p = L.players[id]; return `${ovrTag(p.ovr)} ${p.pos} ${esc(pname(p))} <span class="muted small">${p.age}y · ${fmtMoney(p.con.sal)}</span>`; }).concat(o.get.picks.map(pk => `<span class="pill">${pickLabel(L, pk)}</span>`)).join('<br>');
+        return `<div class="card row" style="align-items:flex-start">${badge(t)}<div class="grow"><b>${esc(teamName(t))}</b> <span class="muted small">${recStr(t)}</span><div class="small" style="margin-top:6px;line-height:1.9">${items}</div></div><button class="btn sm primary" data-act="accept-offer" data-i="${i}">Accept</button></div>`; }).join('');
+      modal(`<div class="modal-head"><h2>Offers for ${giveTxt}</h2><button class="btn sm ghost x" data-act="close">✕</button></div>${rows || '<p class="muted">No team wants that package. Try adding a pick or a better player.</p>'}`);
+      break;
+    }
+    case 'accept-offer': {
+      const o = TRADE.offers && TRADE.offers[+el.dataset.i]; if (!o) break; const s = tradeSides();
+      const ev = tradeEval(L, o.tid, s.give, o.get); if (!ev.ok) { toast(ev.reason || 'Offer expired.'); break; }
+      executeTrade(L, o.tid, s.give, o.get); TRADE.give = { players: [], picks: [] }; TRADE.get = { players: [], picks: [] }; closeModal(); save(); renderHub(); toast('Trade done!'); break;
+    }
     case 'trade-clear': TRADE.give = { players: [], picks: [] }; TRADE.get = { players: [], picks: [] }; renderHub(); break;
     case 'trade-propose': {
       const s = tradeSides(); const ev = tradeEval(L, TRADE.tid, s.give, s.get);
@@ -3067,6 +3473,7 @@ document.addEventListener('click', e => {
     case 'resume': $('#pause').hidden = true; if (GAME) GAME.paused = false; break;
     case 'sim-game-rest': simRestOfGame(); break;
     case 'toggle-touch': touchMode = !touchMode; applyTouch(); break;
+    case 'toggle-cam': if (GAME) { const m = GAME.live.camMode === 'top' ? '3d' : 'top'; GAME.live.camMode = m; LEAGUE.settings.cam = m; save(); toast(m === 'top' ? 'Camera: Top-down' : 'Camera: Broadcast'); } break;
     case 'toggle-sound': window.__mute = !window.__mute; try { localStorage.setItem('gd_mute', window.__mute ? '1' : '0'); } catch (e) { } toast(window.__mute ? 'Sound off' : 'Sound on'); break;
     case 'call-play': if (GAME) { $('#playcall').hidden = true; GAME.live.choose(el.dataset.id); } break;
     case 'call-auto': if (GAME) { $('#playcall').hidden = true; const lg = GAME.live; lg.choose(lg.userOnOffense() ? autoOffCall(lg.gs) : cpuDefCall(lg.gs).id); } break;
@@ -3125,6 +3532,7 @@ function startLiveGame(hid, aid, userTid, opts = {}) {
   const live = new LiveGame(L, gs, userSide, {
     call: mode => showPlayCall(mode), update: () => updateHUD(), result: b => showBanner(b), toast: m => toast(m, 3000), over: () => showFinal(),
   });
+  live.camMode = L.settings.cam || '3d';
   GAME = { live, gs, opts, paused: false, last: performance.now() };
   applyTouch(); resizeCanvas(); updateHUD();
   $('#final').hidden = true; $('#pause').hidden = true; $('#banner').hidden = true;
@@ -3136,7 +3544,10 @@ function loop(now) {
   if (!GAME) return;
   const dt = Math.min(0.05, (now - GAME.last) / 1000); GAME.last = now;
   if (!GAME.paused) {
-    GAME.live.input.mx = KEYS.mx + JOY.x; GAME.live.input.my = KEYS.my + JOY.y; GAME.live.input.sprint = KEYS.sprint || JOY.sprint;
+    const sx = KEYS.mx + JOY.x, sy = KEYS.my + JOY.y, inp = GAME.live.input;
+    if (GAME.live.camMode === 'top') { inp.mx = sx; inp.my = sy; }
+    else { inp.mx = -sy; inp.my = sx; } // broadcast view: stick up = downfield, stick right = offense's right
+    inp.sprint = KEYS.sprint || JOY.sprint;
     GAME.live.update(dt);
   }
   const cv = $('#cv'), ctx = cv.getContext('2d'); const dpr = window.devicePixelRatio || 1;
