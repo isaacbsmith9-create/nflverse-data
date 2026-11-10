@@ -262,6 +262,7 @@ class LiveGame {
     // pass-pro: assign each OL to nearest rusher by y order
     this.assignBlocks();
 
+    this.passer = O.QB; this.passReady = op.type === 'pass'; this.passReadyAt = null; this.runBlocking = op.type === 'run';
     this.ball = { state: 'held', holder: O.QB, x: los, y: by, z: 0 };
     O.QB.hasBallVisual = true;
     // user control
@@ -339,7 +340,7 @@ class LiveGame {
 
   updateCam(dt) {
     let fx = this.ball ? this.ball.x : this.cam.x, fy = this.ball ? this.ball.y : this.cam.y;
-    if (this.phase === 'pre' || (this.phase === 'live' && !this.play.thrown && !this.play.caught && this.carrier() === this.O.QB)) fx = this.los + 9;
+    if (this.phase === 'pre' || (this.phase === 'live' && !this.play.thrown && !this.play.caught && this.carrier() === this.passer && this.passReady && !this.play.crossed)) fx = this.los + 9;
     const k = 1 - Math.exp(-dt * 4);
     this.cam.x += (fx - this.cam.x) * k; this.cam.y += (fy - this.cam.y) * k;
   }
@@ -363,7 +364,7 @@ class LiveGame {
     if (this.ctrl) {
       const c = this.ctrl;
       if (inp.sw) this.cycleDefender();
-      if (car === c && c.role === 'QB' && !pl.thrown && !pl.crossed && this.offPlay.type === 'pass') {
+      if (car === c && c === this.passer && this.passReady && !pl.thrown && !pl.crossed) {
         if (inp.throwTo) this.throwBall(inp.throwTo);
         else if (inp.throwAway) this.throwAway();
       } else if (inp.actionEdge && car === c) {
@@ -380,9 +381,9 @@ class LiveGame {
         if (this.userOnOffense()) this.ctrl = rb;
       }
     }
-    if (b.state === 'held' && b.holder === O.QB && !pl.thrown && this.offPlay.type === 'pass') {
-      if (!pl.crossed && O.QB.x > this.los + 0.3) { pl.crossed = true; pl.scramble = true; this.readAll(this.t, 'scramble'); }
-      if (O.QB !== this.ctrl) this.aiQB(dt);
+    if (b.state === 'held' && b.holder === this.passer && !pl.thrown && this.passReady) {
+      if (!pl.crossed && this.passer.x > this.los + 0.3) { pl.crossed = true; pl.scramble = true; this.readAll(this.t, 'scramble'); }
+      if (this.passer !== this.ctrl) this.aiQB(dt);
     }
     if (this.offPlay.pa && this.t > 0.55 && this.t < 0.6 && !pl.paRead) { pl.paRead = true; for (const e of this.D.LB) e.paFreeze = 0.6; }
 
@@ -445,7 +446,7 @@ class LiveGame {
       return this.aiCarrier(e, dt);
     }
     if (e.side === 'O' && !pl.int) {
-      if (pl.caught || (pl.handoff && e !== O.QB) || pl.scramble) {
+      if (this.isRunPhase() && e !== this.passer) {
         if (e.task.k === 'catch' && b.state === 'air') return this.steer(e, e.task.x, e.task.y, 1, dt);
         return this.aiEscort(e, dt);
       }
@@ -545,7 +546,7 @@ class LiveGame {
   aiRunBlock(e, dt) {
     const car = this.carrier() || this.O.RB;
     let tgt = e.task.assign && !e.task.assign.eng ? e.task.assign : null;
-    if (!tgt || this.dist(tgt, e) > 7) tgt = this.nearest(e, 'D', d => !d.eng && d.freeT <= 0 && d.x > e.x - 2);
+    if (!tgt || tgt.unblocked || this.dist(tgt, e) > 7) tgt = this.nearest(e, 'D', d => !d.eng && !d.unblocked && d.freeT <= 0 && d.x > e.x - 2);
     if (!tgt || this.dist(tgt, e) > 9) return this.steer(e, e.x + 3, e.y, 0.6, dt);
     const dx = tgt.x - car.x, dy = tgt.y - car.y, m = Math.hypot(dx, dy) || 1;
     this.steer(e, tgt.x - dx / m * 0.9, tgt.y - dy / m * 0.9, 0.95, dt);
@@ -626,9 +627,10 @@ class LiveGame {
 
   // CPU quarterback reads
   aiQB(dt) {
-    const pl = this.play, qb = this.O.QB, op = this.offPlay;
+    const pl = this.play, qb = this.passer, op = this.offPlay;
     if (pl.thrown || pl.crossed || this.qbScramble) return;
-    const drop = (op.form === 'single' ? 1.3 : 0.95) + (op.pa ? 0.5 : 0) + (op.screen ? 0.6 : 0);
+    let drop = (op.form === 'single' ? 1.3 : 0.95) + (op.pa ? 0.5 : 0) + (op.screen ? 0.6 : 0);
+    if (this.passReadyAt != null) drop = this.passReadyAt + (op.quick ? 0.15 : 0.45);
     if (this.t < drop) return;
     pl.readT = (pl.readT || 0) + dt;
     if (pl.readT < 0.15) return; pl.readT = 0;
@@ -659,8 +661,8 @@ class LiveGame {
   }
 
   throwBall(r) {
-    const pl = this.play, qb = this.O.QB, b = this.ball;
-    if (pl.thrown || b.holder !== qb) return;
+    const pl = this.play, qb = this.passer, b = this.ball;
+    if (pl.thrown || b.holder !== qb || !this.passReady) return;
     if (!this.eligible.includes(r)) return;
     const bs = 17 + qb.r.thp * 0.11;
     let ax = r.x, ay = r.y, T = 0;
@@ -670,8 +672,9 @@ class LiveGame {
     const qbSpd = Math.hypot(qb.vx, qb.vy);
     const err = (1 - qb.r.tha / 105) * 2.3 * (0.4 + dist / 22) * (1 + pressure * 0.9 + qbSpd / 7 * 0.7);
     ax += gauss(0, err * 0.7); ay += gauss(0, err * 0.7);
+    if (qb === this.ctrl && Math.abs(this.input.mx) + Math.abs(this.input.my) > 0.3) { ax += clamp(this.input.mx, -1, 1) * 2.8; ay += clamp(this.input.my, -1, 1) * 2.8; } // lead with the stick
     b.state = 'air'; b.holder = null; b.sx = qb.x; b.sy = qb.y; b.tx = ax; b.ty = ay; b.t = 0; b.T = Math.hypot(ax - qb.x, ay - qb.y) / bs + 0.12; b.h = Math.min(7, dist * 0.13);
-    pl.thrown = true; pl.target = r; pl.throwX = this.los; pl.tThrow = this.t;
+    pl.thrown = true; pl.target = r; pl.throwX = this.los; pl.tThrow = this.t; pl.passerEnt = qb;
     r.task = { k: 'catch', x: ax, y: ay };
     st(this.gs, qb.p, 'pa'); st(this.gs, r.p, 'tgt');
     sfx('throw');
@@ -682,7 +685,7 @@ class LiveGame {
     }
   }
   throwAway() {
-    const pl = this.play, qb = this.O.QB, b = this.ball; if (pl.thrown || b.holder !== qb) return;
+    const pl = this.play, qb = this.passer, b = this.ball; if (pl.thrown || b.holder !== qb) return; pl.passerEnt = qb;
     const side = qb.y < MID_Y ? -4 : FIELD_W + 4;
     b.state = 'air'; b.holder = null; b.sx = qb.x; b.sy = qb.y; b.tx = qb.x + 8; b.ty = side; b.t = 0; b.T = 0.9; b.h = 4;
     pl.thrown = true; pl.target = null; pl.throwAway = true; st(this.gs, qb.p, 'pa');
@@ -716,7 +719,7 @@ class LiveGame {
       b.state = 'held'; b.holder = d; pl.int = true; pl.intBy = d;
       for (const e of this.ents) e.eng = null;
       if (this.userOnDefense()) this.ctrl = d; else if (this.userOnOffense()) this.ctrl = this.nearest(d, 'O');
-      st(gs, this.O.QB.p, 'pint'); st(gs, d.p, 'dint');
+      st(gs, (pl.passerEnt || this.O.QB).p, 'pint'); st(gs, d.p, 'dint');
       sfx('int'); this.flash('INTERCEPTED!');
     } else {
       if (out === 'pbu') st(gs, d.p, 'pd');
@@ -732,10 +735,10 @@ class LiveGame {
     for (const bl of this.ents) {
       if (bl.side !== 'O' || bl.eng || bl === car || bl.stun > 0) continue;
       const k = bl.task && bl.task.k;
-      const blocking = k === 'pblock' || k === 'rblock' || k === 'block' || ((pl.caught || pl.handoff || pl.scramble) && bl !== this.O.QB && k !== 'catch');
+      const blocking = k === 'pblock' || k === 'rblock' || k === 'block' || (this.isRunPhase() && bl !== this.passer && bl !== this.O.QB && k !== 'catch');
       if (!blocking) continue;
       for (const d of this.ents) {
-        if (d.side !== 'D' || d.eng || d.freeT > 0 || d === car || d.stun > 0) continue;
+        if (d.side !== 'D' || d.eng || d.freeT > 0 || d === car || d.stun > 0 || (d.unblocked && !pl.decided)) continue;
         if (k === 'pblock' && !(d.task.k === 'rush' || d.x < this.los + 3)) continue;
         if (this.dist(bl, d) < 1.15) { bl.eng = d; d.eng = bl; bl.engT = 0; break; }
       }
@@ -745,7 +748,7 @@ class LiveGame {
       if (bl.side !== 'O' || !bl.eng) continue;
       const d = bl.eng; bl.engT += dt;
       const tgt = car || this.ball;
-      const runish = pl.handoff || pl.caught || pl.scramble || this.offPlay.type === 'run';
+      const runish = pl.handoff || pl.caught || pl.scramble || this.runBlocking;
       const dPow = runish ? (d.r.str * 0.5 + d.r.tkl * 0.3 + d.r.prs * 0.2) : (d.r.prs * 0.7 + d.r.str * 0.3);
       const bPow = bl.r.rbk * 0.7 + bl.r.str * 0.3;
       const edge = dPow - bPow;
@@ -792,9 +795,11 @@ class LiveGame {
       const R = d.dive > 0 ? 2.0 : 1.15;
       if (dd > R) continue;
       if (d.eng && (dd > 0.95 || !chance(0.12))) { d.tcd = 0.4; continue; }
-      let p = 0.73 + (d.r.tkl - c.r.btk) / 110;
+      // designed runs by QBs/WRs: elusiveness comes from speed and agility, not just break-tackle
+      const btk = (!this.play.caught && c.role !== 'RB') ? Math.max(c.r.btk, c.r.agi * 0.5 + c.r.spd * 0.42) : c.r.btk;
+      let p = 0.73 + (d.r.tkl - btk) / 110;
       if (c.juke > 0) p -= 0.22 + c.r.agi / 450;
-      if (c.role === 'QB' && !this.play.crossed && !this.play.thrown) p += 0.22;
+      if (c === this.passer && this.passReady && !this.play.crossed && !this.play.thrown) p += 0.22; // sack, not designed runs
       if (d.dive > 0) p += 0.08;
       const behind = (c.side === 'O' ? d.x < c.x : d.x > c.x);
       if (behind) p -= 0.12;
@@ -816,7 +821,7 @@ class LiveGame {
   endPlay(kind, msg) {
     if (this.phase !== 'live') return;
     sfx('whistle');
-    const gs = this.gs, pl = this.play, c = this.carrier(), los = this.los, off = gs.poss;
+    const gs = this.gs, pl = this.play, c = this.carrier(), los = this.los, off = gs.poss; const QBp = (pl.passerEnt || this.O.QB).p;
     if (!c && kind !== 'inc') kind = 'inc';
     const elapsed = Math.max(3, Math.min(this.t, 14));
     const abbr = this.teamOf(off).abbr;
@@ -824,14 +829,14 @@ class LiveGame {
     if (kind === 'inc') {
       title = pl.throwAway ? 'Thrown away' : 'Incomplete';
       sub = msg && msg !== title ? msg : '';
-      logp(gs, `${pshort(this.O.QB.p)} pass ${pl.throwAway ? 'thrown away' : 'incomplete' + (pl.target ? ' to ' + pshort(pl.target.p) : '')}.`);
+      logp(gs, `${pshort(QBp)} pass ${pl.throwAway ? 'thrown away' : 'incomplete' + (pl.target ? ' to ' + pshort(pl.target.p) : '')}.`);
       applyPlay(gs, { yards: 0, inc: true, elapsed });
       return this.result(title, sub);
     }
     if (pl.int) {
       const x = c ? c.x : this.ball.x;
       const td = kind === 'td' || x <= 10;
-      logp(gs, `${pshort(this.O.QB.p)} INTERCEPTED by ${pshort(pl.intBy.p)}${td ? ' — PICK SIX!' : ''}`, true);
+      logp(gs, `${pshort(QBp)} INTERCEPTED by ${pshort(pl.intBy.p)}${td ? ' — PICK SIX!' : ''}`, true);
       if (this.tackler) st(gs, this.tackler.p, 'tk');
       applyPlay(gs, { turnover: { yard: Math.round(110 - x), td }, elapsed });
       return this.result(td ? 'PICK SIX!' : 'INTERCEPTION!', `${pshort(pl.intBy.p)} picks it off`, true);
@@ -841,17 +846,17 @@ class LiveGame {
     let yards = Math.round(spot - los);
     if (gs.yard + yards >= 100) yards = 100 - gs.yard;
     const rusher = pl.caught ? null : c;
-    if (c.role === 'QB' && !pl.thrown && !pl.crossed && yards <= 0 && this.offPlay.type === 'pass') {
+    if (c === this.passer && this.passReady && !pl.thrown && !pl.crossed && yards <= 0) {
       // sack
       if (this.tackler) { st(gs, this.tackler.p, 'sk'); st(gs, this.tackler.p, 'tk'); }
       st(gs, c.p, 'sacked');
       logp(gs, `${pshort(c.p)} sacked${this.tackler ? ' by ' + pshort(this.tackler.p) : ''} for ${-yards}.`);
       title = 'SACKED!'; sub = `Loss of ${-yards}`;
     } else if (pl.caught) {
-      const r = c; st(gs, this.O.QB.p, 'pc'); st(gs, this.O.QB.p, 'py', yards); st(gs, r.p, 'rec'); st(gs, r.p, 'rcy', yards);
-      if (kind === 'td') { st(gs, this.O.QB.p, 'ptd'); st(gs, r.p, 'rctd'); }
-      logp(gs, `${pshort(this.O.QB.p)} pass to ${pshort(r.p)} for ${yards}${kind === 'td' ? ' — TOUCHDOWN!' : ''}.`, kind === 'td');
-      title = kind === 'td' ? 'TOUCHDOWN!' : `Pass complete, ${yards >= 0 ? '+' : ''}${yards}`; sub = `${pshort(this.O.QB.p)} to ${pshort(r.p)}`;
+      const r = c; st(gs, QBp, 'pc'); st(gs, QBp, 'py', yards); st(gs, r.p, 'rec'); st(gs, r.p, 'rcy', yards);
+      if (kind === 'td') { st(gs, QBp, 'ptd'); st(gs, r.p, 'rctd'); }
+      logp(gs, `${pshort(QBp)} pass to ${pshort(r.p)} for ${yards}${kind === 'td' ? ' — TOUCHDOWN!' : ''}.`, kind === 'td');
+      title = kind === 'td' ? 'TOUCHDOWN!' : `Pass complete, ${yards >= 0 ? '+' : ''}${yards}`; sub = `${pshort(QBp)} to ${pshort(r.p)}`;
     } else {
       st(gs, rusher.p, 'ra'); st(gs, rusher.p, 'ry', yards); if (kind === 'td') st(gs, rusher.p, 'rtd');
       logp(gs, `${pshort(rusher.p)} run for ${yards}${kind === 'td' ? ' — TOUCHDOWN!' : ''}.`, kind === 'td');
@@ -953,7 +958,7 @@ class LiveGame {
       if (e.stun > 0) { ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.arc(X, Y, rad, 0, Math.PI * 2); ctx.fill(); }
     }
     // receiver icons
-    if (this.phase === 'live' && this.userOnOffense() && this.offPlay.type === 'pass' && !this.play.thrown && this.carrier() === this.O.QB && !this.play.crossed) {
+    if (this.canUserThrow()) {
       this.eligible.forEach((e, i) => {
         const X = sx(e.x), Y = sy(e.y) - rad * 2.2;
         ctx.fillStyle = RCOL[i]; ctx.beginPath(); ctx.arc(X, Y, rad * 0.95, 0, Math.PI * 2); ctx.fill();

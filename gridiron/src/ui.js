@@ -8,7 +8,7 @@ const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 function show(id) { for (const s of $$('.screen')) s.hidden = s.id !== id; }
 function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, ms); }
-function badge(t, cls = '') { return `<span class="badge ${cls}" style="--c1:${t.c1};--c2:${t.c2}">${esc(t.abbr)}</span>`; }
+function badge(t, cls = '') { return typeof emblemSVG === 'function' ? `<span class="emb ${cls}" title="${esc(t.city + ' ' + t.name)}">${emblemSVG(t)}</span>` : `<span class="badge ${cls}" style="--c1:${t.c1};--c2:${t.c2}">${esc(t.abbr)}</span>`; }
 function ovrTag(o) { return `<span class="ovr ${ovrClass(o)}">${o}</span>`; }
 function modal(html) { $('#modalBox').innerHTML = html; $('#modal').hidden = false; }
 function closeModal() { $('#modal').hidden = true; }
@@ -24,7 +24,7 @@ function renderMenu() {
   const box = $('#slots'); let h = '';
   for (let s = 1; s <= 3; s++) {
     const m = saveMeta(s);
-    if (m) h += `<div class="slot"><div class="row"><span class="badge" style="--c1:${m.c1};--c2:${m.c2}">${esc(m.abbr)}</span><div class="grow"><h3>${esc(m.team)}</h3><div class="muted small">${m.season} · ${phaseLabel(m.phase, m.week)} · ${m.rec}</div></div></div>
+    if (m) h += `<div class="slot"><div class="row">${badge({ abbr: m.abbr, c1: m.c1, c2: m.c2, name: m.team.split(' ').slice(-1)[0], city: '' })}<div class="grow"><h3>${esc(m.team)}</h3><div class="muted small">${m.season} · ${phaseLabel(m.phase, m.week)} · ${m.rec}</div></div></div>
       <div class="row"><button class="btn primary sm" data-act="load" data-slot="${s}">Continue</button><button class="btn danger sm" data-act="del-slot" data-slot="${s}">Delete</button></div></div>`;
     else h += `<div class="slot"><h3 class="muted">Slot ${s} — empty</h3><div><button class="btn sm" data-act="new-franchise" data-slot="${s}">Start franchise here</button></div></div>`;
   }
@@ -569,23 +569,26 @@ function updateHUD() {
   const q = gs.quarter <= 4 ? 'Q' + gs.quarter : 'OT';
   const lg = GAME.live;
   const clock = lg.phase === 'live' ? Math.max(0, gs.clock - lg.t) : gs.clock;
-  const sbt = s => `<div class="sb-team ${gs.poss === s ? 'has' : ''}" style="--c1:${tm(s).c1}"><span class="poss"></span><span class="ab">${tm(s).abbr}</span><span class="sc">${gs.score[s]}</span></div>`;
+  const sbt = s => `<div class="sb-team ${gs.poss === s ? 'has' : ''}" style="--c1:${tm(s).c1}"><span class="poss"></span><span class="emb xs">${emblemSVG(tm(s))}</span><span class="ab">${tm(s).abbr}</span><span class="sc">${gs.score[s]}</span></div>`;
   $('#scorebug').innerHTML = `${sbt(1)}<div class="sb-mid"><div class="clk">${q} ${fmtClock(clock)}</div><div class="dd">${downStr(gs)} · ${yardStr(gs)}</div></div>${sbt(0)}`;
   // hint + action button label
   const ph = lg.phase; let hint = '', act = 'Action';
   if (ph === 'pre') { if (lg.userOnOffense()) { hint = touchMode ? 'Tap SNAP to start the play' : 'Press SPACE to snap'; act = 'Snap'; } else { hint = touchMode ? 'SWITCH picks your defender' : 'E switches your defender · play starts automatically'; act = 'Dive'; } }
   else if (ph === 'live') {
     const c = lg.carrier();
-    if (lg.userOnOffense() && c === lg.O.QB && lg.offPlay.type === 'pass' && !lg.play.thrown && !lg.play.crossed) { hint = touchMode ? 'Tap a receiver to throw' : 'Press 1–5 to throw · T throws it away'; act = 'Juke'; }
+    const sh = lg.scriptHint && lg.scriptHint();
+    if (sh) { hint = touchMode ? sh.touch : sh.key; act = sh.act || act; }
+    else if (lg.canUserThrow()) { hint = touchMode ? 'Tap a receiver to throw · hold the stick to lead him' : 'Press 1–5 to throw · hold a direction to lead him · T throws it away'; act = 'Juke'; }
+    else if (c && c === lg.ctrl && c.role === 'QB' && lg.play.crossed) { hint = touchMode ? 'SLIDE gives yourself up' : 'E to slide'; act = 'Juke'; }
     else if (c && c === lg.ctrl) { hint = ''; act = 'Juke'; }
     else { act = lg.ball && lg.ball.state === 'air' ? 'Swat' : 'Dive'; }
   } else if (ph === 'kick') { hint = ''; act = 'Kick'; }
   else if (ph === 'post') act = 'Next';
   const h = $('#hint'); h.hidden = !hint; h.textContent = hint;
   $('#tbAct').textContent = act;
-  $('#tbSwitch').textContent = lg.userOnOffense() && ph === 'live' && lg.carrier() === lg.O.QB ? 'Throw away' : 'Switch';
+  $('#tbSwitch').textContent = lg.userOnOffense() && ph === 'live' ? (lg.canUserThrow() ? 'Throw away' : lg.carrier() === lg.ctrl && lg.ctrl && lg.ctrl.role === 'QB' && lg.play.crossed ? 'Slide' : 'Switch') : 'Switch';
   // receiver buttons
-  const showR = touchMode && ph === 'live' && lg.userOnOffense() && lg.offPlay.type === 'pass' && !lg.play.thrown && lg.carrier() === lg.O.QB && !lg.play.crossed;
+  const showR = touchMode && lg.canUserThrow();
   const rb = $('#rbtns'); rb.hidden = !showR;
   const rk = showR ? lg.offPlay.id + '|' + lg.los + '|' + gs.down + '|' + gs.quarter + '|' + gs.clock : '';
   if (showR && rb.dataset.k !== rk) {
@@ -610,16 +613,21 @@ function playSVG(play, kind) {
     const pos = {}; for (const k in F) pos[k] = [F[k][0], by + F[k][1]];
     for (const dy of OL_DY) s += `<circle cx="${X(by + dy)}" cy="${Y(-0.8)}" r="1.7" fill="#ddd"/>`;
     const rcolor = { WR1: RCOL[0], WR2: RCOL[1], WR3: RCOL[2], TE: RCOL[3], RB: RCOL[4] };
+    const cum = (dx, y, steps) => { let x = dx, yy = y; return steps.map(([a, b]) => { x += a; yy += b; return [x, yy]; }); };
     for (const k of ['WR1', 'WR2', 'WR3', 'TE', 'RB']) {
       const [dx, y] = pos[k];
-      let pts = null;
-      if (play.type === 'run') { if (k === 'RB') { let x = dx, yy = y; pts = play.path.map(([a, b]) => { x += a; yy += b; return [x, yy]; }); } }
-      else if (play.routes[k] && play.routes[k] !== 'block') pts = LiveGame.prototype.routePts.call(null, play.routes[k], dx, y, by);
-      const col = play.type === 'run' ? '#fff' : rcolor[k];
+      let pts = null, col = rcolor[k];
+      const rt = play.routes && play.routes[k];
+      if (rt && rt !== 'block') pts = LiveGame.prototype.routePts.call(null, rt, dx, y, by);
+      else if (k === play.handTo && play.carrierPath) { pts = cum(dx, y, play.carrierPath); col = '#fff'; }
+      else if (k === 'RB' && play.path) { pts = cum(dx, y, play.path); col = '#fff'; }
       if (pts) s += `<polyline fill="none" stroke="${col}" stroke-width="1.2" stroke-linejoin="round" points="${[[dx, y], ...pts].map(([a, b]) => `${X(clamp(b, 0, FIELD_W)).toFixed(1)},${clamp(Y(Math.min(a, 26)), 1, 61).toFixed(1)}`).join(' ')}"/>`;
       else if (play.type === 'pass' || k !== 'RB') s += `<line x1="${X(y)}" y1="${Y(dx)}" x2="${X(y)}" y2="${Y(dx) - 3}" stroke="#bbb" stroke-width="1"/><line x1="${X(y) - 1.5}" y1="${Y(dx) - 3}" x2="${X(y) + 1.5}" y2="${Y(dx) - 3}" stroke="#bbb" stroke-width="1"/>`;
       s += `<circle cx="${X(y)}" cy="${Y(dx)}" r="1.9" fill="${col}"/>`;
     }
+    if (play.qbPath) { const q = cum(pos.QB[0], by, play.qbPath); s += `<polyline fill="none" stroke="#ffb81c" stroke-width="1.3" stroke-dasharray="2 1.2" points="${[[pos.QB[0], by], ...q].map(([a, b]) => `${X(clamp(b, 0, FIELD_W)).toFixed(1)},${clamp(Y(Math.min(a, 26)), 1, 61).toFixed(1)}`).join(' ')}"/>`; }
+    if (play.read) { const rd = { DL4: [1.1, 4.4], DL1: [1.1, -4.4], LB1: [5, -3.5], LB2: [5, 3.5] }[play.read]; if (rd) s += `<rect x="${X(by + rd[1]) - 4}" y="${Y(rd[0]) - 2.6}" width="8" height="4.4" rx="1" fill="#ff5a4e"/><text x="${X(by + rd[1])}" y="${Y(rd[0]) + 0.6}" font-size="3" text-anchor="middle" fill="#fff" font-weight="800">READ</text>`; }
+    if (play.lateralTo || play.toss || play.flea) s += `<text x="96" y="7" font-size="5" text-anchor="end" fill="#ffb81c" font-weight="800">${play.flea ? 'FLICK' : 'LAT'}</text>`;
     s += `<circle cx="${X(by)}" cy="${Y(pos.QB[0])}" r="1.9" fill="#fff" stroke="#111" stroke-width=".5"/>`;
   } else {
     const spots = { DL1: [1.1, -4.4], DL2: [1.1, -1.5], DL3: [1.1, 1.5], DL4: [1.1, 4.4], LB1: [5, -3.5], LB2: [5, 3.5], CB1: [5.5, -18], CB2: [5.5, 17.5], CB3: [4.5, -9.5], S1: [13, -9], S2: [13, 9] };
@@ -648,7 +656,8 @@ function showPlayCall(mode) {
       if (gs.down === 4) specials.push(`<button class="play special" data-act="call-play" data-id="punt"><span class="tag">Special teams</span><span class="pn">Punt</span><span class="pd">Flip the field.</span></button>`);
     }
     if (gs.score[gs.poss] > gs.score[1 - gs.poss] && gs.quarter >= 4 && gs.clock < 150) specials.push(`<button class="play special" data-act="call-play" data-id="kneel"><span class="tag">Clock</span><span class="pn">QB Kneel</span><span class="pd">Run out the clock.</span></button>`);
-    cards = specials.join('') + OFF_PLAYS.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'off')}<span class="tag">${p.type === 'run' ? 'Run' : 'Pass'}</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('');
+    const cats = ['Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
+    cards = specials.join('') + cats.map(c => { const ps = OFF_PLAYS.filter(p => (p.cat || 'Pass') === c); if (!ps.length) return ''; return `<h3 class="pc-cat">${c === 'Trick' ? 'Trick plays' : c === 'RPO' ? 'RPOs' : c}</h3>` + ps.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'off')}<span class="tag">${c}</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join(''); }).join('');
   } else {
     cards = DEF_PLAYS.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'def')}<span class="tag">Defense</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('');
   }
@@ -762,7 +771,7 @@ function applyTouch() {
   const hold = (id, on, off) => { const b = $(id); b.addEventListener('pointerdown', e => { e.preventDefault(); on(); b.classList.add('on'); }); const up = () => { off && off(); b.classList.remove('on'); }; b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('pointerleave', up); };
   hold('#tbAct', () => { if (GAME) GAME.live.input.actionEdge = true; });
   hold('#tbSprint', () => JOY.sprint = true, () => JOY.sprint = false);
-  hold('#tbSwitch', () => { if (!GAME) return; const lg = GAME.live; if (lg.userOnOffense() && lg.phase === 'live' && lg.carrier() === lg.O.QB) lg.input.throwAway = true; else lg.input.sw = true; });
+  hold('#tbSwitch', () => { if (!GAME) return; const lg = GAME.live; if (lg.canUserThrow()) lg.input.throwAway = true; else lg.input.sw = true; });
   $('#rbtns').addEventListener('pointerdown', e => { const b = e.target.closest('[data-rb]'); if (!b || !GAME) return; e.preventDefault(); GAME.live.input.throwTo = GAME.live.eligible[+b.dataset.rb]; });
   $('#cv').addEventListener('pointerdown', e => {
     if (!GAME) return; const lg = GAME.live;

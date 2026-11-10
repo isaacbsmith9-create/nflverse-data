@@ -59,7 +59,7 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
   const nearZ = 10, camH = (H * 0.97 - hor) * nearZ / F;
   const cy = clamp(this.cam.y, MID_Y - 12, MID_Y + 12);
   // pull back while the QB is in the pocket / pre-snap, tighten up once the ball is out
-  const pocket = this.phase === 'pre' || this.phase === 'call' || (this.phase === 'live' && this.carrier() === (this.O && this.O.QB) && !this.play.crossed);
+  const pocket = this.phase === 'pre' || this.phase === 'call' || (this.phase === 'live' && this.carrier() === this.passer && this.passReady && !this.play.crossed);
   this.backT = (this.backT == null ? 28 : this.backT) + ((pocket ? 28 : 19) - (this.backT == null ? 28 : this.backT)) * 0.06;
   this.c3 = { F, hor, camH, W, H, camX: this.cam.x - this.backT, camY: this.c3 ? this.c3.camY + (cy - this.c3.camY) * 0.08 : cy };
   const P = (x, y, h) => this.proj(x, y, h);
@@ -115,7 +115,9 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
   }
   if (60 > x0 + 3) { // midfield emblem
     const p = P(60, MID_Y);
-    if (p) { ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1, Math.min(0.55, 4.5 / p.z + 0.12)); ctx.fillStyle = homeT.c1; ctx.strokeStyle = homeT.c2; ctx.lineWidth = 0.35 * p.k;
+    const img = typeof emblemImage === 'function' ? emblemImage(homeT) : null;
+    if (p && img) { ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1, Math.min(0.55, 4.5 / p.z + 0.12)); const s = 9.5 * p.k; ctx.globalAlpha = 0.92; ctx.drawImage(img, -s / 2, -s / 2, s, s); ctx.restore(); }
+    else if (p) { ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1, Math.min(0.55, 4.5 / p.z + 0.12)); ctx.fillStyle = homeT.c1; ctx.strokeStyle = homeT.c2; ctx.lineWidth = 0.35 * p.k;
       ctx.beginPath(); ctx.arc(0, 0, 4.2 * p.k, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = homeT.c2; ctx.font = `800 ${Math.round(3.2 * p.k)}px 'Saira Condensed', system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(homeT.abbr, 0, 0.2 * p.k); ctx.restore(); }
   }
@@ -157,8 +159,9 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
     const sp = Math.hypot(e.vx, e.vy); e.phase = (e.phase || Math.random() * 6) + sp * 0.03;
     drawFigure(ctx, p.x, p.y, p.k, e, this.teamOf(side), side === 0, sp, e === this.ctrl, e === carrier && this.ball && this.ball.state === 'held');
   }
+  if (this.drawScriptTags) this.drawScriptTags(ctx, P);
   // receiver icons
-  if (this.phase === 'live' && this.userOnOffense() && this.offPlay.type === 'pass' && !this.play.thrown && this.carrier() === this.O.QB && !this.play.crossed) {
+  if (this.canUserThrow()) {
     this.eligible.forEach((e, i) => {
       const p = P(e.x, e.y, 2.75); if (!p) return; const r = Math.max(9, 0.42 * p.k);
       ctx.fillStyle = RCOL[i]; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -167,7 +170,7 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
   }
   // ball in flight
   const b = this.ball;
-  if (b && b.state === 'air') {
+  if (b && (b.state === 'air' || b.state === 'pitch')) {
     const sh = P(b.x, b.y), p = P(b.x, b.y, 1.3 + b.z);
     if (sh) { ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(sh.x, sh.y, 0.3 * sh.k, 0.1 * sh.k, 0, 0, Math.PI * 2); ctx.fill(); }
     if (p) { drawBall(ctx, p.x, p.y, Math.max(3, 0.32 * p.k), this.t2 * 14); }

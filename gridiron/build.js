@@ -3,7 +3,7 @@
 //  - dist/gridiron-artifact.html : body-only version for publishing as a claude.ai artifact
 const fs = require('fs'), path = require('path');
 const src = f => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
-const files = ['data.js', 'franchise.js', 'moves.js', 'real.js', 'sim.js', 'game.js', 'game3d.js', 'ui.js'];
+const files = ['data.js', 'franchise.js', 'moves.js', 'real.js', 'sim.js', 'game.js', 'plays.js', 'game3d.js', 'logos.js', 'ui.js'];
 const js = files.map(src).join('\n');
 // the real-NFL data ships only in the standalone index.html, never in the artifact build
 const realJs = fs.existsSync(path.join(__dirname, 'src', 'nfl_data.js')) ? src('nfl_data.js') + '\n' : '';
