@@ -67,8 +67,10 @@ function removeFromTeam(L, p) {
   for (const pos in t.depth) t.depth[pos] = t.depth[pos].filter(id => id !== p.id);
   p.tid = null;
 }
+// players on injured reserve (ir) don't count toward the 53-man limit
+function activeCount(L, t) { return t.roster.reduce((n, id) => n + (L.players[id].ir ? 0 : 1), 0); }
 function payroll(L, t) { return t.roster.reduce((s, id) => s + L.players[id].con.sal, 0); }
-function capRoom(L, t) { return CAP - payroll(L, t); }
+function capRoom(L, t) { return capOf(L) - payroll(L, t); }
 function trimToCap(L, t) {
   // scale down contracts if generated team is over cap (initial league only)
   const pay = payroll(L, t);
@@ -228,7 +230,7 @@ function commitBox(L, box, g) {
 
 function injuriesTick(L, played) {
   // heal
-  for (const t of L.teams) for (const id of t.roster) { const p = L.players[id]; if (p.inj > 0) { p.inj--; if (p.inj === 0 && t.id === L.userTid) addNews(L, `${p.pos} ${pname(p)} has returned from injury.`); } }
+  for (const t of L.teams) for (const id of t.roster) { const p = L.players[id]; if (p.inj > 0) { p.inj--; if (p.inj === 0) p.ir = false; if (p.inj === 0 && t.id === L.userTid) addNews(L, `${p.pos} ${pname(p)} has returned from injury.`); } }
   // new injuries for players who played
   for (const tid of played) {
     const t = L.teams[tid]; const lu = lineup(L, t);
@@ -263,7 +265,7 @@ function simWeek(L, includeUser = true) {
       injuriesTick(L, played);
       aiRosterMoves(L);
       L.week++;
-      if (L.week > SEASON_WEEKS) startPlayoffs(L);
+      if (L.week > weeksOf(L)) startPlayoffs(L);
     }
     return;
   }
@@ -281,20 +283,21 @@ function simWeek(L, includeUser = true) {
 const ROUND_NAMES = ['Wild Card', 'Divisional', 'Conference Championship', 'Grand Bowl'];
 function startPlayoffs(L) {
   L.phase = 'playoffs';
-  const seeds = { East: confSeeds(L, 'East'), West: confSeeds(L, 'West') };
-  L.playoffs = { round: 0, seeds, games: [], done: [], alive: { East: seeds.East.slice(), West: seeds.West.slice() } };
-  const made = seeds.East.concat(seeds.West).includes(L.userTid);
+  const [C1, C2] = confsOf(L);
+  const seeds = { [C1]: confSeeds(L, C1), [C2]: confSeeds(L, C2) };
+  L.playoffs = { round: 0, seeds, games: [], done: [], alive: { [C1]: seeds[C1].slice(), [C2]: seeds[C2].slice() } };
+  const made = Object.values(seeds).flat().includes(L.userTid);
   addNews(L, made ? `🏈 The ${L.teams[L.userTid].name} clinched a playoff spot (#${(seeds[L.teams[L.userTid].conf].indexOf(L.userTid) + 1)} seed)!` : `The ${L.teams[L.userTid].name} missed the playoffs this season.`);
   makePlayoffRound(L);
 }
 function makePlayoffRound(L) {
   const po = L.playoffs; po.games = [];
   if (po.round === 3) {
-    const e = po.alive.East[0], w = po.alive.West[0];
+    const [C1, C2] = confsOf(L); const e = po.alive[C1][0], w = po.alive[C2][0];
     po.games.push({ h: e, a: w, hs: null, as: null, round: 3, neutral: true });
     return;
   }
-  for (const conf of ['East', 'West']) {
+  for (const conf of confsOf(L)) {
     const seedOrder = po.seeds[conf];
     const alive = po.alive[conf].slice().sort((a, b) => seedOrder.indexOf(a) - seedOrder.indexOf(b));
     let teams = alive;
@@ -308,7 +311,7 @@ function advancePlayoffs(L) {
   for (const g of po.games) {
     const win = g.hs > g.as ? g.h : g.a, lose = win === g.h ? g.a : g.h;
     po.done.push(g);
-    for (const c of ['East', 'West']) po.alive[c] = po.alive[c].filter(x => x !== lose);
+    for (const c of confsOf(L)) po.alive[c] = po.alive[c].filter(x => x !== lose);
     if (lose === L.userTid) addNews(L, `Season over: eliminated in the ${ROUND_NAMES[g.round]} by ${L.teams[win].abbr} (${Math.max(g.hs, g.as)}-${Math.min(g.hs, g.as)}).`);
     if (g.round === 3) {
       L.teams[win].titles++;
@@ -421,7 +424,7 @@ function finishResign(L) {
 function faAsk(p) { return Math.round(marketSalary(p) * 1.08 * 100) / 100; }
 function signFA(L, tid, p, yrs, sal, force) {
   const t = L.teams[tid];
-  if (t.roster.length >= ROSTER_MAX) return 'Roster is full (53).';
+  if (activeCount(L, t) >= ROSTER_MAX) return 'Roster is full (53 active players). Release someone first.';
   if (!force && capRoom(L, t) < sal) return 'Not enough cap space.';
   L.fa = L.fa.filter(id => id !== p.id);
   p.con = { sal: Math.round(sal * 100) / 100, yrs };
@@ -446,7 +449,7 @@ function aiFreeAgencyRound(L, maxPerTeam = 1) {
   for (const t of shuffle(L.teams.slice())) {
     if (t.id === L.userTid) continue;
     for (let k = 0; k < maxPerTeam; k++) {
-      if (t.roster.length >= ROSTER_MAX - 1) break;
+      if (activeCount(L, t) >= ROSTER_MAX - 1) break;
       let bestP = null, bestS = -1;
       for (const p of pool) {
         if (p.tid != null) continue;
@@ -469,7 +472,7 @@ function aiRosterMoves(L) {
       if (healthy < STARTERS[pos] + (pos === 'K' || pos === 'P' ? 0 : 1)) {
         const cand = L.fa.map(id => L.players[id]).filter(p => p.pos === pos && faAsk(p) < capRoom(L, t)).sort((a, b) => b.ovr - a.ovr)[0];
         if (cand) {
-          if (t.roster.length >= ROSTER_MAX) cutWorst(L, t);
+          if (activeCount(L, t) >= ROSTER_MAX) cutWorst(L, t);
           signFA(L, t.id, cand, 1, faAsk(cand));
         }
       }
@@ -579,7 +582,8 @@ function startNewSeason(L) {
   // AI fills rosters & cuts
   for (let i = 0; i < 4; i++) aiFreeAgencyRound(L, 2);
   for (const t of L.teams) {
-    if (t.id !== L.userTid) { while (t.roster.length > ROSTER_MAX) cutWorst(L, t); autoDepth(L, t); }
+    if (t.id !== L.userTid) { for (const id of t.roster) L.players[id].ir = false;
+      while (t.roster.length > ROSTER_MAX) cutWorst(L, t); autoDepth(L, t); }
     else {
       // keep the user's team playable: auto-sign cheap depth if roster is thin
       let added = 0;
@@ -602,7 +606,7 @@ function startNewSeason(L) {
   L.week = 1; L.phase = 'regular'; L.playoffs = null; L.draft = null;
   L.schedule = makeSchedule(L);
   L.draftClass = genDraftClass(L);
-  addNews(L, `The ${L.season} season begins! Payroll: ${fmtMoney(payroll(L, L.teams[L.userTid]))} of ${fmtMoney(CAP)}.`);
+  addNews(L, `The ${L.season} season begins! Payroll: ${fmtMoney(payroll(L, L.teams[L.userTid]))} of ${fmtMoney(capOf(L))}.`);
 }
 
 // ---------- trades ----------
@@ -615,8 +619,8 @@ function tradeEval(L, otherTid, give, get) {
   let reason = null;
   if (capRoom(L, t) + salOut - salIn < 0) reason = `${t.abbr} can't fit the salary under the cap.`;
   if (capRoom(L, u) + salIn - salOut < 0) reason = `You can't fit the incoming salary under the cap.`;
-  if (t.roster.length - get.players.length + give.players.length > ROSTER_MAX) reason = `${t.abbr} roster would exceed 53.`;
-  if (u.roster.length + get.players.length - give.players.length > ROSTER_MAX) reason = `Your roster would exceed 53.`;
+  if (activeCount(L, t) - get.players.length + give.players.length > ROSTER_MAX) reason = `${t.abbr} roster would exceed 53.`;
+  if (activeCount(L, u) + get.players.length - give.players.length > ROSTER_MAX) reason = `Your roster would exceed 53.`;
   const ratio = theyGive > 0 ? theyGet / theyGive : (theyGet > 0 ? 9 : 0);
   return { theyGet, theyGive, ratio, ok: !reason && theyGet > 0 && ratio >= 1.08, reason };
 }

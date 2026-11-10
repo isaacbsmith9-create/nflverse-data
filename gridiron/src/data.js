@@ -31,7 +31,10 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 // ---------- league constants ----------
 const CAP = 255;            // salary cap in $M
 const ROSTER_MAX = 53;
-const SEASON_WEEKS = 17;
+const SEASON_WEEKS = 17;   // generated schedules; real schedules may have 18 weeks with byes
+const capOf = L => (L && L.cap) || CAP;
+const confsOf = L => (L && L.confs) || ['East', 'West'];
+const weeksOf = L => (L && L.schedule && L.schedule.length) || SEASON_WEEKS;
 
 // city, nickname, abbr, primary, secondary
 const TEAM_DEFS = [
@@ -122,7 +125,7 @@ const LAST = ('Johnson Williams Brown Jones Davis Miller Wilson Moore Taylor And
   'Wood Watson Brooks Bennett Gray James Hughes Price Sanders Myers Long Ross Foster Powell Jenkins Perry Russell Sullivan Butler ' +
   'Barnes Fisher Henderson Coleman Simmons Patterson Jordan Reynolds Hamilton Graham Wallace Woods West Cole Hayes Bryant Gibson ' +
   'Ellis Stevens Murray Ford Marshall Owens McDonald Harrison Kennedy Wells Dixon Hunt Palmer Holmes Mason Rice Black Daniels Knight ' +
-  'Boone Hargrove Okafor Mahomes Fuimaono Tagaloa Mbeki Castillo Delgado Ramos Vega Ortiz Sutton Pruitt Battle Moton Diggs Lockett ' +
+  'Boone Hargrove Okafor Mabry Fuimaono Tagaloa Mbeki Castillo Delgado Ramos Vega Ortiz Sutton Pruitt Battle Moton Dyson Lockhart ' +
   'Fontenot Thibodeaux Broussard Landry Guidry Kincaid Stroud Whitfield Calloway Booker Crenshaw Dunbar Pickett Rhodes Steele Strong').split(' ');
 const COLLEGES = ('Alabama;Georgia;Ohio State;Michigan;Texas;LSU;Oregon;USC;Clemson;Notre Dame;Penn State;Florida;Florida State;Miami;Oklahoma;' +
   'Tennessee;Auburn;Texas A&M;Washington;Utah;Wisconsin;Iowa;Ole Miss;Missouri;Kentucky;TCU;Baylor;UCLA;Stanford;Arizona State;' +
@@ -193,7 +196,7 @@ function playerValue(p) {
   return base * ageF * potF * POS_VALUE[p.pos];
 }
 
-function devLabel(d) { return d === 'X' ? 'Superstar' : d === 'S' ? 'Star' : 'Normal'; }
+function devLabel(d) { return d === 'X' ? 'Superstar X' : d === 'S' ? 'Star' : 'Normal'; }
 function pname(p) { return p.first + ' ' + p.last; }
 function pshort(p) { return p.first[0] + '. ' + p.last; }
 function ovrClass(o) { return o >= 90 ? 'o-elite' : o >= 80 ? 'o-good' : o >= 70 ? 'o-ok' : o >= 60 ? 'o-meh' : 'o-bad'; }

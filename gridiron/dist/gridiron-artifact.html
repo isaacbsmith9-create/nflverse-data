@@ -174,7 +174,7 @@ table.t { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-
 .sb-mid .clk { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .sb-mid .dd { font-size: 13px; color: var(--amber); font-weight: 700; letter-spacing: .03em; }
 .g-btn { position: absolute; z-index: 6; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.2); color: #fff; border-radius: 10px; width: 44px; height: 44px; display: grid; place-items: center; cursor: pointer; font-size: 18px; }
-#pauseBtn { top: calc(8px + env(safe-area-inset-top, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); }
+#pauseBtn { z-index: 25; top: calc(8px + env(safe-area-inset-top, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); }
 .banner { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); text-align: center; z-index: 7; pointer-events: none; width: 92%; }
 .banner .bt { font: 800 italic clamp(34px, 7vw, 76px)/0.95 var(--f-display); text-transform: uppercase; color: #fff; text-shadow: 0 4px 0 rgba(0,0,0,.35), 0 0 30px rgba(0,0,0,.5); }
 .banner.big .bt { color: var(--amber); }
@@ -258,6 +258,7 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
     <div class="row"><button class="btn ghost" data-act="menu">← Back</button><h1 id="setupTitle" style="font-size:36px">Choose your team</h1></div>
     <div class="card stack">
       <div class="row">
+        <label id="leagueWrap" hidden>League <select id="setLeague"><option value="real" selected>Real NFL 2026 rosters</option><option value="fake">Fictional league</option></select></label>
         <label>Difficulty <select id="setDiff"><option value="rookie">Rookie</option><option value="pro" selected>Pro</option><option value="allpro">All-Pro</option><option value="legend">Legend</option></select></label>
         <label>Quarter length <select id="setQlen"><option value="120">2 min</option><option value="180">3 min</option><option value="240" selected>4 min</option><option value="300">5 min</option><option value="480">8 min</option></select></label>
         <label id="awayWrap" hidden>Opponent <select id="setAway"></select></label>
@@ -349,7 +350,10 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 // ---------- league constants ----------
 const CAP = 255;            // salary cap in $M
 const ROSTER_MAX = 53;
-const SEASON_WEEKS = 17;
+const SEASON_WEEKS = 17;   // generated schedules; real schedules may have 18 weeks with byes
+const capOf = L => (L && L.cap) || CAP;
+const confsOf = L => (L && L.confs) || ['East', 'West'];
+const weeksOf = L => (L && L.schedule && L.schedule.length) || SEASON_WEEKS;
 
 // city, nickname, abbr, primary, secondary
 const TEAM_DEFS = [
@@ -440,7 +444,7 @@ const LAST = ('Johnson Williams Brown Jones Davis Miller Wilson Moore Taylor And
   'Wood Watson Brooks Bennett Gray James Hughes Price Sanders Myers Long Ross Foster Powell Jenkins Perry Russell Sullivan Butler ' +
   'Barnes Fisher Henderson Coleman Simmons Patterson Jordan Reynolds Hamilton Graham Wallace Woods West Cole Hayes Bryant Gibson ' +
   'Ellis Stevens Murray Ford Marshall Owens McDonald Harrison Kennedy Wells Dixon Hunt Palmer Holmes Mason Rice Black Daniels Knight ' +
-  'Boone Hargrove Okafor Mahomes Fuimaono Tagaloa Mbeki Castillo Delgado Ramos Vega Ortiz Sutton Pruitt Battle Moton Diggs Lockett ' +
+  'Boone Hargrove Okafor Mabry Fuimaono Tagaloa Mbeki Castillo Delgado Ramos Vega Ortiz Sutton Pruitt Battle Moton Dyson Lockhart ' +
   'Fontenot Thibodeaux Broussard Landry Guidry Kincaid Stroud Whitfield Calloway Booker Crenshaw Dunbar Pickett Rhodes Steele Strong').split(' ');
 const COLLEGES = ('Alabama;Georgia;Ohio State;Michigan;Texas;LSU;Oregon;USC;Clemson;Notre Dame;Penn State;Florida;Florida State;Miami;Oklahoma;' +
   'Tennessee;Auburn;Texas A&M;Washington;Utah;Wisconsin;Iowa;Ole Miss;Missouri;Kentucky;TCU;Baylor;UCLA;Stanford;Arizona State;' +
@@ -511,7 +515,7 @@ function playerValue(p) {
   return base * ageF * potF * POS_VALUE[p.pos];
 }
 
-function devLabel(d) { return d === 'X' ? 'Superstar' : d === 'S' ? 'Star' : 'Normal'; }
+function devLabel(d) { return d === 'X' ? 'Superstar X' : d === 'S' ? 'Star' : 'Normal'; }
 function pname(p) { return p.first + ' ' + p.last; }
 function pshort(p) { return p.first[0] + '. ' + p.last; }
 function ovrClass(o) { return o >= 90 ? 'o-elite' : o >= 80 ? 'o-good' : o >= 70 ? 'o-ok' : o >= 60 ? 'o-meh' : 'o-bad'; }
@@ -585,8 +589,10 @@ function removeFromTeam(L, p) {
   for (const pos in t.depth) t.depth[pos] = t.depth[pos].filter(id => id !== p.id);
   p.tid = null;
 }
+// players on injured reserve (ir) don't count toward the 53-man limit
+function activeCount(L, t) { return t.roster.reduce((n, id) => n + (L.players[id].ir ? 0 : 1), 0); }
 function payroll(L, t) { return t.roster.reduce((s, id) => s + L.players[id].con.sal, 0); }
-function capRoom(L, t) { return CAP - payroll(L, t); }
+function capRoom(L, t) { return capOf(L) - payroll(L, t); }
 function trimToCap(L, t) {
   // scale down contracts if generated team is over cap (initial league only)
   const pay = payroll(L, t);
@@ -746,7 +752,7 @@ function commitBox(L, box, g) {
 
 function injuriesTick(L, played) {
   // heal
-  for (const t of L.teams) for (const id of t.roster) { const p = L.players[id]; if (p.inj > 0) { p.inj--; if (p.inj === 0 && t.id === L.userTid) addNews(L, `${p.pos} ${pname(p)} has returned from injury.`); } }
+  for (const t of L.teams) for (const id of t.roster) { const p = L.players[id]; if (p.inj > 0) { p.inj--; if (p.inj === 0) p.ir = false; if (p.inj === 0 && t.id === L.userTid) addNews(L, `${p.pos} ${pname(p)} has returned from injury.`); } }
   // new injuries for players who played
   for (const tid of played) {
     const t = L.teams[tid]; const lu = lineup(L, t);
@@ -781,7 +787,7 @@ function simWeek(L, includeUser = true) {
       injuriesTick(L, played);
       aiRosterMoves(L);
       L.week++;
-      if (L.week > SEASON_WEEKS) startPlayoffs(L);
+      if (L.week > weeksOf(L)) startPlayoffs(L);
     }
     return;
   }
@@ -799,20 +805,21 @@ function simWeek(L, includeUser = true) {
 const ROUND_NAMES = ['Wild Card', 'Divisional', 'Conference Championship', 'Grand Bowl'];
 function startPlayoffs(L) {
   L.phase = 'playoffs';
-  const seeds = { East: confSeeds(L, 'East'), West: confSeeds(L, 'West') };
-  L.playoffs = { round: 0, seeds, games: [], done: [], alive: { East: seeds.East.slice(), West: seeds.West.slice() } };
-  const made = seeds.East.concat(seeds.West).includes(L.userTid);
+  const [C1, C2] = confsOf(L);
+  const seeds = { [C1]: confSeeds(L, C1), [C2]: confSeeds(L, C2) };
+  L.playoffs = { round: 0, seeds, games: [], done: [], alive: { [C1]: seeds[C1].slice(), [C2]: seeds[C2].slice() } };
+  const made = Object.values(seeds).flat().includes(L.userTid);
   addNews(L, made ? `🏈 The ${L.teams[L.userTid].name} clinched a playoff spot (#${(seeds[L.teams[L.userTid].conf].indexOf(L.userTid) + 1)} seed)!` : `The ${L.teams[L.userTid].name} missed the playoffs this season.`);
   makePlayoffRound(L);
 }
 function makePlayoffRound(L) {
   const po = L.playoffs; po.games = [];
   if (po.round === 3) {
-    const e = po.alive.East[0], w = po.alive.West[0];
+    const [C1, C2] = confsOf(L); const e = po.alive[C1][0], w = po.alive[C2][0];
     po.games.push({ h: e, a: w, hs: null, as: null, round: 3, neutral: true });
     return;
   }
-  for (const conf of ['East', 'West']) {
+  for (const conf of confsOf(L)) {
     const seedOrder = po.seeds[conf];
     const alive = po.alive[conf].slice().sort((a, b) => seedOrder.indexOf(a) - seedOrder.indexOf(b));
     let teams = alive;
@@ -826,7 +833,7 @@ function advancePlayoffs(L) {
   for (const g of po.games) {
     const win = g.hs > g.as ? g.h : g.a, lose = win === g.h ? g.a : g.h;
     po.done.push(g);
-    for (const c of ['East', 'West']) po.alive[c] = po.alive[c].filter(x => x !== lose);
+    for (const c of confsOf(L)) po.alive[c] = po.alive[c].filter(x => x !== lose);
     if (lose === L.userTid) addNews(L, `Season over: eliminated in the ${ROUND_NAMES[g.round]} by ${L.teams[win].abbr} (${Math.max(g.hs, g.as)}-${Math.min(g.hs, g.as)}).`);
     if (g.round === 3) {
       L.teams[win].titles++;
@@ -939,7 +946,7 @@ function finishResign(L) {
 function faAsk(p) { return Math.round(marketSalary(p) * 1.08 * 100) / 100; }
 function signFA(L, tid, p, yrs, sal, force) {
   const t = L.teams[tid];
-  if (t.roster.length >= ROSTER_MAX) return 'Roster is full (53).';
+  if (activeCount(L, t) >= ROSTER_MAX) return 'Roster is full (53 active players). Release someone first.';
   if (!force && capRoom(L, t) < sal) return 'Not enough cap space.';
   L.fa = L.fa.filter(id => id !== p.id);
   p.con = { sal: Math.round(sal * 100) / 100, yrs };
@@ -964,7 +971,7 @@ function aiFreeAgencyRound(L, maxPerTeam = 1) {
   for (const t of shuffle(L.teams.slice())) {
     if (t.id === L.userTid) continue;
     for (let k = 0; k < maxPerTeam; k++) {
-      if (t.roster.length >= ROSTER_MAX - 1) break;
+      if (activeCount(L, t) >= ROSTER_MAX - 1) break;
       let bestP = null, bestS = -1;
       for (const p of pool) {
         if (p.tid != null) continue;
@@ -987,7 +994,7 @@ function aiRosterMoves(L) {
       if (healthy < STARTERS[pos] + (pos === 'K' || pos === 'P' ? 0 : 1)) {
         const cand = L.fa.map(id => L.players[id]).filter(p => p.pos === pos && faAsk(p) < capRoom(L, t)).sort((a, b) => b.ovr - a.ovr)[0];
         if (cand) {
-          if (t.roster.length >= ROSTER_MAX) cutWorst(L, t);
+          if (activeCount(L, t) >= ROSTER_MAX) cutWorst(L, t);
           signFA(L, t.id, cand, 1, faAsk(cand));
         }
       }
@@ -1097,7 +1104,8 @@ function startNewSeason(L) {
   // AI fills rosters & cuts
   for (let i = 0; i < 4; i++) aiFreeAgencyRound(L, 2);
   for (const t of L.teams) {
-    if (t.id !== L.userTid) { while (t.roster.length > ROSTER_MAX) cutWorst(L, t); autoDepth(L, t); }
+    if (t.id !== L.userTid) { for (const id of t.roster) L.players[id].ir = false;
+      while (t.roster.length > ROSTER_MAX) cutWorst(L, t); autoDepth(L, t); }
     else {
       // keep the user's team playable: auto-sign cheap depth if roster is thin
       let added = 0;
@@ -1120,7 +1128,7 @@ function startNewSeason(L) {
   L.week = 1; L.phase = 'regular'; L.playoffs = null; L.draft = null;
   L.schedule = makeSchedule(L);
   L.draftClass = genDraftClass(L);
-  addNews(L, `The ${L.season} season begins! Payroll: ${fmtMoney(payroll(L, L.teams[L.userTid]))} of ${fmtMoney(CAP)}.`);
+  addNews(L, `The ${L.season} season begins! Payroll: ${fmtMoney(payroll(L, L.teams[L.userTid]))} of ${fmtMoney(capOf(L))}.`);
 }
 
 // ---------- trades ----------
@@ -1133,8 +1141,8 @@ function tradeEval(L, otherTid, give, get) {
   let reason = null;
   if (capRoom(L, t) + salOut - salIn < 0) reason = `${t.abbr} can't fit the salary under the cap.`;
   if (capRoom(L, u) + salIn - salOut < 0) reason = `You can't fit the incoming salary under the cap.`;
-  if (t.roster.length - get.players.length + give.players.length > ROSTER_MAX) reason = `${t.abbr} roster would exceed 53.`;
-  if (u.roster.length + get.players.length - give.players.length > ROSTER_MAX) reason = `Your roster would exceed 53.`;
+  if (activeCount(L, t) - get.players.length + give.players.length > ROSTER_MAX) reason = `${t.abbr} roster would exceed 53.`;
+  if (activeCount(L, u) + get.players.length - give.players.length > ROSTER_MAX) reason = `Your roster would exceed 53.`;
   const ratio = theyGive > 0 ? theyGet / theyGive : (theyGet > 0 ? 9 : 0);
   return { theyGet, theyGive, ratio, ok: !reason && theyGet > 0 && ratio >= 1.08, reason };
 }
@@ -1169,6 +1177,66 @@ function saveMeta(slot) {
   } catch (e) { return null; }
 }
 function deleteSave(slot) { try { localStorage.removeItem(SAVE_PREFIX + slot); } catch (e) { } }
+
+// ============================================================
+// Gridiron Dynasty - real NFL league loader (uses NFL_DATA from nfl_data.js when present)
+// ============================================================
+'use strict';
+
+function hasRealData() { return typeof NFL_DATA !== 'undefined' && NFL_DATA && NFL_DATA.players; }
+
+// nudge a player's position-key ratings so the computed OVR lands on the target
+function fitOvr(p, target, locked) {
+  const w = OVR_W[p.pos];
+  for (let it = 0; it < 8; it++) {
+    let s = 0; for (const k in w) s += p.r[k] * w[k];
+    const diff = target - s; if (Math.abs(diff) < 0.4) break;
+    const free = Object.keys(w).filter(k => !locked[k] && p.r[k] > 16 && p.r[k] < 99);
+    const sw = free.reduce((a, k) => a + w[k], 0); if (!sw) break;
+    for (const k of free) p.r[k] = Math.round(clamp(p.r[k] + diff / sw, 15, 99));
+  }
+  p.ovr = calcOvr(p);
+}
+
+function newRealLeague(userAbbr, opts = {}) {
+  const D = NFL_DATA;
+  const L = {
+    version: 1, real: true, nextPid: 1, season: D.season, week: 1, phase: 'regular',
+    userTid: 0, teams: [], players: {}, fa: [], schedule: [], playoffs: null,
+    draftClass: [], picks: [], news: [], history: [], awards: [], draft: null,
+    settings: Object.assign({ qlen: 240, diff: 'pro', simDef: false, autoSave: true }, opts.settings || {}),
+    cap: 301.2, confs: ['AFC', 'NFC'], dataAsOf: D.asOf,
+  };
+  const idx = {};
+  D.teams.forEach(([abbr, city, name, c1, c2, conf, div, coach], i) => {
+    idx[abbr] = i;
+    L.teams.push({ id: i, city, name, abbr, c1, c2, conf, div, coach, roster: [], depth: {}, w: 0, l: 0, t: 0, pf: 0, pa: 0, titles: 0, strength: 0 });
+  });
+  for (const row of D.players) {
+    const [first, last, pos, age, num, ovr, dev, col, sal, yrs, tm, entry, dn, ov, exp, inj] = row;
+    const p = genPlayer(L, pos, ovr, age);
+    p.first = first; p.last = last; p.num = num || jerseyNum(pos); p.dev = dev; p.col = col || '—';
+    p.con = { sal: Math.max(0.75, sal), yrs: Math.max(1, yrs) };
+    const locked = ov || {};
+    for (const k in locked) p.r[k] = locked[k];
+    fitOvr(p, ovr, locked);
+    const upside = Math.max(0, 27 - age) * rand(0.8, 2.6) + (dev === 'X' ? 5 : dev === 'S' ? 2 : 0);
+    p.pot = Math.round(clamp(p.ovr + upside + gauss(0, 2), p.ovr, 99));
+    p.rookie = exp === 0; p.inj = inj || 0; p.ir = !!inj;
+    if (dn) p.draft = { season: entry, round: Math.min(7, Math.ceil(dn / 32)), pick: dn, tid: -1 };
+    if (tm && idx[tm] != null) {
+      L.players[p.id] = p; p.tid = idx[tm]; L.teams[p.tid].roster.push(p.id); // keep real jersey numbers
+    } else { p.tid = null; L.players[p.id] = p; L.fa.push(p.id); }
+  }
+  for (const t of L.teams) autoDepth(L, t);
+  // game cap scaled to the payrolls we could match from public contract data
+  L.cap = Math.round(Math.max(200, Math.max(...L.teams.map(t => payroll(L, t))) * 1.08));
+  L.schedule = D.schedule.map(wk => wk.map(([h, a]) => ({ h: idx[h], a: idx[a], hs: null, as: null })));
+  L.userTid = idx[userAbbr] != null ? idx[userAbbr] : 0;
+  initPicks(L);
+  L.draftClass = genDraftClass(L);
+  return L;
+}
 
 // ============================================================
 // Gridiron Dynasty - game rules + statistical play-by-play sim
@@ -2583,7 +2651,9 @@ function firstFreeSlot() { for (let s = 1; s <= 3; s++) if (!saveMeta(s)) return
 // ============================================================ SETUP
 let SETUP = { mode: 'franchise', tid: null, slot: 1, tmp: null };
 function renderSetup(mode, slot) {
-  SETUP = { mode, tid: null, slot: slot || firstFreeSlot(), tmp: newLeague('BOS') };
+  const real = hasRealData() && $('#setLeague').value === 'real';
+  SETUP = { mode, tid: null, slot: slot || (SETUP.slot && mode === SETUP.mode ? SETUP.slot : firstFreeSlot()), tmp: real ? newRealLeague('BUF') : newLeague('BOS') };
+  $('#leagueWrap').hidden = !hasRealData();
   show('setup');
   $('#setupTitle').textContent = mode === 'franchise' ? 'Choose your franchise' : 'Quick Play — pick your team';
   $('#awayWrap').hidden = mode !== 'quick';
@@ -2592,11 +2662,11 @@ function renderSetup(mode, slot) {
   $('#setAway').innerHTML = L.teams.map(t => `<option value="${t.id}">${esc(teamName(t))}</option>`).join('');
   $('#setAway').value = String(randi(0, 31));
   let h = '';
-  for (const conf of ['East', 'West']) {
-    h += `<h2 class="conf-h">${conf} Conference</h2><div class="teams-grid">`;
+  for (const conf of confsOf(L)) {
+    h += `<h2 class="conf-h">${conf}${L.real ? '' : ' Conference'}</h2><div class="teams-grid">`;
     for (const t of L.teams.filter(t => t.conf === conf)) {
       const o = teamOvr(L, t);
-      h += `<button class="team-card" data-act="pick-team" data-tid="${t.id}">${badge(t)}<div class="grow"><div class="nm">${esc(t.city)}<br>${esc(t.name)}</div><div class="muted small">${t.div} · OFF ${o.off} · DEF ${o.def}</div></div>${ovrTag(o.ovr)}</button>`;
+      h += `<button class="team-card" data-act="pick-team" data-tid="${t.id}">${badge(t)}<div class="grow"><div class="nm">${esc(t.city)}<br>${esc(t.name)}</div><div class="muted small">${t.coach ? 'HC ' + esc(t.coach) + ' · ' : ''}${t.div} · OFF ${o.off} · DEF ${o.def}</div></div>${ovrTag(o.ovr)}</button>`;
     }
     h += '</div>';
   }
@@ -2624,7 +2694,7 @@ function renderHub() {
   const L = LEAGUE, t = UT(), o = teamOvr(L, t);
   document.documentElement.style.setProperty('--tc1', t.c1);
   $('#hubHead').innerHTML = `<div class="wrap">${badge(t, 'lg')}<div class="grow"><div class="hub-title">${esc(teamName(t))}</div>
-    <div class="hub-sub">${L.season} · ${phaseLabel(L.phase, L.week)} · <b class="num">${recStr(t)}</b> · OVR ${o.ovr} (OFF ${o.off} / DEF ${o.def}) · Cap room <b class="num">${fmtMoney(capRoom(L, t))}</b> · Roster ${t.roster.length}/53</div></div>
+    <div class="hub-sub">${t.coach ? 'Head coach ' + esc(t.coach) + ' · ' : ''}${L.season} · ${phaseLabel(L.phase, L.week)} · <b class="num">${recStr(t)}</b> · OVR ${o.ovr} (OFF ${o.off} / DEF ${o.def}) · Cap room <b class="num">${fmtMoney(capRoom(L, t))}</b> · Roster ${activeCount(L, t)}/53${t.roster.length > activeCount(L, t) ? ` (+${t.roster.length - activeCount(L, t)} IR)` : ''}</div></div>
     <button class="btn sm ghost" data-act="menu">Menu</button></div>`;
   const dotTab = { home: ['recap', 'resign', 'fa', 'draft'].includes(L.phase), draft: L.phase === 'draft', fa: L.phase === 'fa' };
   $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${n}${dotTab[k] ? '<span class="dot"></span>' : ''}</button>`).join('');
@@ -2658,8 +2728,8 @@ function homeGameCard() {
     return `<div class="card"><h2>Bye</h2><div class="row"><button class="btn primary" data-act="sim-week">Sim week</button></div></div>`;
   }
   const H = L.teams[g.h], A = L.teams[g.a], oh = teamOvr(L, H), oa = teamOvr(L, A);
-  const label = L.phase === 'playoffs' ? ROUND_NAMES[L.playoffs.round] : `Week ${L.week} of ${SEASON_WEEKS}`;
-  const side = t => `<div class="side">${badge(t, 'lg')}<div class="tn">${esc(t.city)}<br>${esc(t.name)}</div><div class="muted small num">${recStr(t)} · OVR ${teamOvr(L, t).ovr}</div></div>`;
+  const label = L.phase === 'playoffs' ? ROUND_NAMES[L.playoffs.round] : `Week ${L.week} of ${weeksOf(L)}`;
+  const side = t => `<div class="side">${badge(t, 'lg')}<div class="tn">${esc(t.city)}<br>${esc(t.name)}</div><div class="muted small num">${recStr(t)} · OVR ${teamOvr(L, t).ovr}</div>${t.coach ? `<div class="muted small">HC ${esc(t.coach)}</div>` : ''}</div>`;
   return `<div class="card stack"><div class="row"><span class="eyebrow grow">${label}</span><span class="pill">${g.h === L.userTid ? 'HOME' : 'AWAY'}</span></div>
     <div class="matchup">${side(A)}<div class="vs">@</div>${side(H)}</div>
     <div class="row" style="justify-content:center"><button class="btn primary" data-act="play-game">▶ Play Game</button><button class="btn" data-act="sim-game">Sim Game</button>
@@ -2708,12 +2778,12 @@ function viewRoster() {
   if (ROSTER_FILTER !== 'ALL') ps = ps.filter(p => p.pos === ROSTER_FILTER);
   const sorters = { pos: (a, b) => POS_ORDER[a.pos] - POS_ORDER[b.pos] || b.ovr - a.ovr, ovr: (a, b) => b.ovr - a.ovr, age: (a, b) => a.age - b.age, sal: (a, b) => b.con.sal - a.con.sal };
   ps.sort(sorters[ROSTER_SORT] || sorters.pos);
-  const rows = ps.map(p => `<tr class="click" data-act="player" data-pid="${p.id}"><td>${p.pos}</td><td>#${p.num} ${esc(pname(p))}${p.inj ? ` <span class="inj">INJ ${p.inj}w</span>` : ''}${p.rookie ? ' <span class="pill">R</span>' : ''}</td>
+  const rows = ps.map(p => `<tr class="click" data-act="player" data-pid="${p.id}"><td>${p.pos}</td><td>#${p.num} ${esc(pname(p))}${p.inj ? ` <span class="inj">${p.ir ? 'IR' : 'INJ'} ${p.inj}w</span>` : ''}${p.rookie ? ' <span class="pill">R</span>' : ''}</td>
     <td class="r">${p.age}</td><td class="r">${ovrTag(p.ovr)}</td><td class="dev-${p.dev}">${devLabel(p.dev)}</td><td class="r">${fmtMoney(p.con.sal)}</td><td class="r">${p.con.yrs}</td><td class="small muted">${statLine(p)}</td></tr>`).join('');
   return `<div class="card stack"><div class="row"><h2 class="grow" style="margin:0">Roster</h2>
     <select data-act="roster-filter">${['ALL', ...POSITIONS].map(p => `<option ${p === ROSTER_FILTER ? 'selected' : ''}>${p}</option>`).join('')}</select>
     <select data-act="roster-sort">${[['pos', 'Sort: Position'], ['ovr', 'Sort: OVR'], ['age', 'Sort: Age'], ['sal', 'Sort: Salary']].map(([k, n]) => `<option value="${k}" ${k === ROSTER_SORT ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-    <div class="muted small">Payroll ${fmtMoney(payroll(L, t))} / ${fmtMoney(CAP)} · ${t.roster.length} players. Tap a player for ratings, contract and actions.</div>
+    <div class="muted small">Payroll ${fmtMoney(payroll(L, t))} / ${fmtMoney(capOf(L))} · ${t.roster.length} players. Tap a player for ratings, contract and actions.</div>
     <div class="tbl-wrap"><table class="t"><thead><tr><th>Pos</th><th>Player</th><th class="r">Age</th><th class="r">OVR</th><th>Dev</th><th class="r">Salary</th><th class="r">Yrs</th><th>Season</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function statLine(p, s) {
@@ -2785,11 +2855,11 @@ function viewSchedule() {
 // ---------- standings ----------
 function viewStandings() {
   const L = LEAGUE;
-  const seeds = { East: confSeeds(L, 'East'), West: confSeeds(L, 'West') };
+  const seeds = {}; for (const c of confsOf(L)) seeds[c] = confSeeds(L, c);
   let h = '';
-  for (const conf of ['East', 'West']) {
+  for (const conf of confsOf(L)) {
     const divs = divisions(L, conf);
-    h += `<div class="card"><h2>${conf} Conference</h2><div class="cols">`;
+    h += `<div class="card"><h2>${conf}${L.real ? '' : ' Conference'}</h2><div class="cols">`;
     for (const d in divs) {
       h += `<div><div class="eyebrow" style="margin-bottom:6px">${d.split(' ')[1]}</div><div class="tbl-wrap"><table class="t"><thead><tr><th>Team</th><th class="r">W-L-T</th><th class="r">PF</th><th class="r">PA</th><th class="r">Seed</th></tr></thead><tbody>${divs[d].map(id => {
         const t = L.teams[id]; const s = seeds[conf].indexOf(id);
@@ -2852,7 +2922,7 @@ function viewFA() {
   ps.sort((a, b) => b.ovr - a.ovr);
   const rows = ps.slice(0, 120).map(p => `<tr class="click" data-act="player" data-pid="${p.id}"><td>${p.pos}</td><td>${esc(pname(p))}</td><td class="r">${p.age}</td><td class="r">${ovrTag(p.ovr)}</td><td class="dev-${p.dev}">${devLabel(p.dev)}</td><td class="r">${fmtMoney(faAsk(p))}</td></tr>`).join('');
   return `<div class="card stack"><div class="row"><h2 class="grow" style="margin:0">Free agents</h2><select data-act="fa-filter">${['ALL', ...POSITIONS].map(p => `<option ${p === FA_FILTER ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
-    <div class="muted small">Cap room <b>${fmtMoney(capRoom(L, u))}</b> · Roster ${u.roster.length}/53. Tap a player to sign him.</div>
+    <div class="muted small">Cap room <b>${fmtMoney(capRoom(L, u))}</b> · Roster ${activeCount(L, u)}/53. Tap a player to sign him.</div>
     <div class="tbl-wrap"><table class="t"><thead><tr><th>Pos</th><th>Name</th><th class="r">Age</th><th class="r">OVR</th><th>Dev</th><th class="r">Asking / yr</th></tr></thead><tbody>${rows || '<tr><td class="muted">Nobody available.</td></tr>'}</tbody></table></div></div>`;
 }
 
@@ -3005,6 +3075,7 @@ document.addEventListener('click', e => {
   }
 });
 document.addEventListener('change', e => {
+  if (e.target.id === 'setLeague') { renderSetup(SETUP.mode, SETUP.slot); return; }
   const el = e.target.closest('[data-act]'); if (!el) return;
   const a = el.dataset.act, L = LEAGUE;
   if (a === 'roster-filter') { ROSTER_FILTER = el.value; renderHub(); }
@@ -3038,7 +3109,7 @@ function howTo() {
     <div><div class="eyebrow">Keyboard (Chromebook)</div><p><kbd>W A S D</kbd> / arrows — move<br><kbd>Shift</kbd> — sprint<br><kbd>Space</kbd> — snap · juke (ball carrier) · dive tackle (defense) · kick<br><kbd>1</kbd>–<kbd>5</kbd> — throw to that receiver<br><kbd>T</kbd> — throw it away<br><kbd>E</kbd> — switch defender<br><kbd>Esc</kbd> — pause</p></div>
     <div><div class="eyebrow">Touch (phone)</div><p>Left half: drag to move.<br>SNAP / ACTION — snap, juke, dive, kick.<br>Tap a receiver (or the colored buttons) to throw.<br>SPRINT — hold to run faster.<br>SWITCH — change defender.</p></div>
     <div><div class="eyebrow">Tips</div><p>Hold the ball too long and you'll get sacked. Man coverage loses to crossing routes; zones leave holes between defenders. If you let go of the stick, your ball carrier keeps running on his own. On defense, your player plays his assignment until you move him.</p></div>
-    <div><div class="eyebrow">Franchise</div><p>17-game season, 14-team playoffs, then an offseason: progression and retirements, re-signing, three days of free agency and a 7-round draft. Watch the $${CAP}M salary cap.</p></div>
+    <div><div class="eyebrow">Franchise</div><p>17-game season (the real 18-week 2026 schedule in the NFL league), 14-team playoffs, then an offseason: progression and retirements, re-signing, three days of free agency and a 7-round draft. Watch the salary cap.</p></div>
   </div>`);
 }
 

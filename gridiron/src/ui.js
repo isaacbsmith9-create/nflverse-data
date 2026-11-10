@@ -38,7 +38,9 @@ function firstFreeSlot() { for (let s = 1; s <= 3; s++) if (!saveMeta(s)) return
 // ============================================================ SETUP
 let SETUP = { mode: 'franchise', tid: null, slot: 1, tmp: null };
 function renderSetup(mode, slot) {
-  SETUP = { mode, tid: null, slot: slot || firstFreeSlot(), tmp: newLeague('BOS') };
+  const real = hasRealData() && $('#setLeague').value === 'real';
+  SETUP = { mode, tid: null, slot: slot || (SETUP.slot && mode === SETUP.mode ? SETUP.slot : firstFreeSlot()), tmp: real ? newRealLeague('BUF') : newLeague('BOS') };
+  $('#leagueWrap').hidden = !hasRealData();
   show('setup');
   $('#setupTitle').textContent = mode === 'franchise' ? 'Choose your franchise' : 'Quick Play — pick your team';
   $('#awayWrap').hidden = mode !== 'quick';
@@ -47,11 +49,11 @@ function renderSetup(mode, slot) {
   $('#setAway').innerHTML = L.teams.map(t => `<option value="${t.id}">${esc(teamName(t))}</option>`).join('');
   $('#setAway').value = String(randi(0, 31));
   let h = '';
-  for (const conf of ['East', 'West']) {
-    h += `<h2 class="conf-h">${conf} Conference</h2><div class="teams-grid">`;
+  for (const conf of confsOf(L)) {
+    h += `<h2 class="conf-h">${conf}${L.real ? '' : ' Conference'}</h2><div class="teams-grid">`;
     for (const t of L.teams.filter(t => t.conf === conf)) {
       const o = teamOvr(L, t);
-      h += `<button class="team-card" data-act="pick-team" data-tid="${t.id}">${badge(t)}<div class="grow"><div class="nm">${esc(t.city)}<br>${esc(t.name)}</div><div class="muted small">${t.div} · OFF ${o.off} · DEF ${o.def}</div></div>${ovrTag(o.ovr)}</button>`;
+      h += `<button class="team-card" data-act="pick-team" data-tid="${t.id}">${badge(t)}<div class="grow"><div class="nm">${esc(t.city)}<br>${esc(t.name)}</div><div class="muted small">${t.coach ? 'HC ' + esc(t.coach) + ' · ' : ''}${t.div} · OFF ${o.off} · DEF ${o.def}</div></div>${ovrTag(o.ovr)}</button>`;
     }
     h += '</div>';
   }
@@ -79,7 +81,7 @@ function renderHub() {
   const L = LEAGUE, t = UT(), o = teamOvr(L, t);
   document.documentElement.style.setProperty('--tc1', t.c1);
   $('#hubHead').innerHTML = `<div class="wrap">${badge(t, 'lg')}<div class="grow"><div class="hub-title">${esc(teamName(t))}</div>
-    <div class="hub-sub">${L.season} · ${phaseLabel(L.phase, L.week)} · <b class="num">${recStr(t)}</b> · OVR ${o.ovr} (OFF ${o.off} / DEF ${o.def}) · Cap room <b class="num">${fmtMoney(capRoom(L, t))}</b> · Roster ${t.roster.length}/53</div></div>
+    <div class="hub-sub">${t.coach ? 'Head coach ' + esc(t.coach) + ' · ' : ''}${L.season} · ${phaseLabel(L.phase, L.week)} · <b class="num">${recStr(t)}</b> · OVR ${o.ovr} (OFF ${o.off} / DEF ${o.def}) · Cap room <b class="num">${fmtMoney(capRoom(L, t))}</b> · Roster ${activeCount(L, t)}/53${t.roster.length > activeCount(L, t) ? ` (+${t.roster.length - activeCount(L, t)} IR)` : ''}</div></div>
     <button class="btn sm ghost" data-act="menu">Menu</button></div>`;
   const dotTab = { home: ['recap', 'resign', 'fa', 'draft'].includes(L.phase), draft: L.phase === 'draft', fa: L.phase === 'fa' };
   $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${n}${dotTab[k] ? '<span class="dot"></span>' : ''}</button>`).join('');
@@ -113,8 +115,8 @@ function homeGameCard() {
     return `<div class="card"><h2>Bye</h2><div class="row"><button class="btn primary" data-act="sim-week">Sim week</button></div></div>`;
   }
   const H = L.teams[g.h], A = L.teams[g.a], oh = teamOvr(L, H), oa = teamOvr(L, A);
-  const label = L.phase === 'playoffs' ? ROUND_NAMES[L.playoffs.round] : `Week ${L.week} of ${SEASON_WEEKS}`;
-  const side = t => `<div class="side">${badge(t, 'lg')}<div class="tn">${esc(t.city)}<br>${esc(t.name)}</div><div class="muted small num">${recStr(t)} · OVR ${teamOvr(L, t).ovr}</div></div>`;
+  const label = L.phase === 'playoffs' ? ROUND_NAMES[L.playoffs.round] : `Week ${L.week} of ${weeksOf(L)}`;
+  const side = t => `<div class="side">${badge(t, 'lg')}<div class="tn">${esc(t.city)}<br>${esc(t.name)}</div><div class="muted small num">${recStr(t)} · OVR ${teamOvr(L, t).ovr}</div>${t.coach ? `<div class="muted small">HC ${esc(t.coach)}</div>` : ''}</div>`;
   return `<div class="card stack"><div class="row"><span class="eyebrow grow">${label}</span><span class="pill">${g.h === L.userTid ? 'HOME' : 'AWAY'}</span></div>
     <div class="matchup">${side(A)}<div class="vs">@</div>${side(H)}</div>
     <div class="row" style="justify-content:center"><button class="btn primary" data-act="play-game">▶ Play Game</button><button class="btn" data-act="sim-game">Sim Game</button>
@@ -163,12 +165,12 @@ function viewRoster() {
   if (ROSTER_FILTER !== 'ALL') ps = ps.filter(p => p.pos === ROSTER_FILTER);
   const sorters = { pos: (a, b) => POS_ORDER[a.pos] - POS_ORDER[b.pos] || b.ovr - a.ovr, ovr: (a, b) => b.ovr - a.ovr, age: (a, b) => a.age - b.age, sal: (a, b) => b.con.sal - a.con.sal };
   ps.sort(sorters[ROSTER_SORT] || sorters.pos);
-  const rows = ps.map(p => `<tr class="click" data-act="player" data-pid="${p.id}"><td>${p.pos}</td><td>#${p.num} ${esc(pname(p))}${p.inj ? ` <span class="inj">INJ ${p.inj}w</span>` : ''}${p.rookie ? ' <span class="pill">R</span>' : ''}</td>
+  const rows = ps.map(p => `<tr class="click" data-act="player" data-pid="${p.id}"><td>${p.pos}</td><td>#${p.num} ${esc(pname(p))}${p.inj ? ` <span class="inj">${p.ir ? 'IR' : 'INJ'} ${p.inj}w</span>` : ''}${p.rookie ? ' <span class="pill">R</span>' : ''}</td>
     <td class="r">${p.age}</td><td class="r">${ovrTag(p.ovr)}</td><td class="dev-${p.dev}">${devLabel(p.dev)}</td><td class="r">${fmtMoney(p.con.sal)}</td><td class="r">${p.con.yrs}</td><td class="small muted">${statLine(p)}</td></tr>`).join('');
   return `<div class="card stack"><div class="row"><h2 class="grow" style="margin:0">Roster</h2>
     <select data-act="roster-filter">${['ALL', ...POSITIONS].map(p => `<option ${p === ROSTER_FILTER ? 'selected' : ''}>${p}</option>`).join('')}</select>
     <select data-act="roster-sort">${[['pos', 'Sort: Position'], ['ovr', 'Sort: OVR'], ['age', 'Sort: Age'], ['sal', 'Sort: Salary']].map(([k, n]) => `<option value="${k}" ${k === ROSTER_SORT ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-    <div class="muted small">Payroll ${fmtMoney(payroll(L, t))} / ${fmtMoney(CAP)} · ${t.roster.length} players. Tap a player for ratings, contract and actions.</div>
+    <div class="muted small">Payroll ${fmtMoney(payroll(L, t))} / ${fmtMoney(capOf(L))} · ${t.roster.length} players. Tap a player for ratings, contract and actions.</div>
     <div class="tbl-wrap"><table class="t"><thead><tr><th>Pos</th><th>Player</th><th class="r">Age</th><th class="r">OVR</th><th>Dev</th><th class="r">Salary</th><th class="r">Yrs</th><th>Season</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function statLine(p, s) {
@@ -240,11 +242,11 @@ function viewSchedule() {
 // ---------- standings ----------
 function viewStandings() {
   const L = LEAGUE;
-  const seeds = { East: confSeeds(L, 'East'), West: confSeeds(L, 'West') };
+  const seeds = {}; for (const c of confsOf(L)) seeds[c] = confSeeds(L, c);
   let h = '';
-  for (const conf of ['East', 'West']) {
+  for (const conf of confsOf(L)) {
     const divs = divisions(L, conf);
-    h += `<div class="card"><h2>${conf} Conference</h2><div class="cols">`;
+    h += `<div class="card"><h2>${conf}${L.real ? '' : ' Conference'}</h2><div class="cols">`;
     for (const d in divs) {
       h += `<div><div class="eyebrow" style="margin-bottom:6px">${d.split(' ')[1]}</div><div class="tbl-wrap"><table class="t"><thead><tr><th>Team</th><th class="r">W-L-T</th><th class="r">PF</th><th class="r">PA</th><th class="r">Seed</th></tr></thead><tbody>${divs[d].map(id => {
         const t = L.teams[id]; const s = seeds[conf].indexOf(id);
@@ -307,7 +309,7 @@ function viewFA() {
   ps.sort((a, b) => b.ovr - a.ovr);
   const rows = ps.slice(0, 120).map(p => `<tr class="click" data-act="player" data-pid="${p.id}"><td>${p.pos}</td><td>${esc(pname(p))}</td><td class="r">${p.age}</td><td class="r">${ovrTag(p.ovr)}</td><td class="dev-${p.dev}">${devLabel(p.dev)}</td><td class="r">${fmtMoney(faAsk(p))}</td></tr>`).join('');
   return `<div class="card stack"><div class="row"><h2 class="grow" style="margin:0">Free agents</h2><select data-act="fa-filter">${['ALL', ...POSITIONS].map(p => `<option ${p === FA_FILTER ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
-    <div class="muted small">Cap room <b>${fmtMoney(capRoom(L, u))}</b> · Roster ${u.roster.length}/53. Tap a player to sign him.</div>
+    <div class="muted small">Cap room <b>${fmtMoney(capRoom(L, u))}</b> · Roster ${activeCount(L, u)}/53. Tap a player to sign him.</div>
     <div class="tbl-wrap"><table class="t"><thead><tr><th>Pos</th><th>Name</th><th class="r">Age</th><th class="r">OVR</th><th>Dev</th><th class="r">Asking / yr</th></tr></thead><tbody>${rows || '<tr><td class="muted">Nobody available.</td></tr>'}</tbody></table></div></div>`;
 }
 
@@ -460,6 +462,7 @@ document.addEventListener('click', e => {
   }
 });
 document.addEventListener('change', e => {
+  if (e.target.id === 'setLeague') { renderSetup(SETUP.mode, SETUP.slot); return; }
   const el = e.target.closest('[data-act]'); if (!el) return;
   const a = el.dataset.act, L = LEAGUE;
   if (a === 'roster-filter') { ROSTER_FILTER = el.value; renderHub(); }
@@ -493,7 +496,7 @@ function howTo() {
     <div><div class="eyebrow">Keyboard (Chromebook)</div><p><kbd>W A S D</kbd> / arrows — move<br><kbd>Shift</kbd> — sprint<br><kbd>Space</kbd> — snap · juke (ball carrier) · dive tackle (defense) · kick<br><kbd>1</kbd>–<kbd>5</kbd> — throw to that receiver<br><kbd>T</kbd> — throw it away<br><kbd>E</kbd> — switch defender<br><kbd>Esc</kbd> — pause</p></div>
     <div><div class="eyebrow">Touch (phone)</div><p>Left half: drag to move.<br>SNAP / ACTION — snap, juke, dive, kick.<br>Tap a receiver (or the colored buttons) to throw.<br>SPRINT — hold to run faster.<br>SWITCH — change defender.</p></div>
     <div><div class="eyebrow">Tips</div><p>Hold the ball too long and you'll get sacked. Man coverage loses to crossing routes; zones leave holes between defenders. If you let go of the stick, your ball carrier keeps running on his own. On defense, your player plays his assignment until you move him.</p></div>
-    <div><div class="eyebrow">Franchise</div><p>17-game season, 14-team playoffs, then an offseason: progression and retirements, re-signing, three days of free agency and a 7-round draft. Watch the $${CAP}M salary cap.</p></div>
+    <div><div class="eyebrow">Franchise</div><p>17-game season (the real 18-week 2026 schedule in the NFL league), 14-team playoffs, then an offseason: progression and retirements, re-signing, three days of free agency and a 7-round draft. Watch the salary cap.</p></div>
   </div>`);
 }
 

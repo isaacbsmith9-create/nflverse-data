@@ -2,7 +2,14 @@
 
 A pro football game with a full franchise mode. It runs in the browser on a Chromebook, a laptop or a phone. There's nothing to install and no build step needed to play.
 
-The league, teams and players are all made up.
+It has two league modes:
+
+- **Real NFL 2026:** all 32 teams with real rosters, ages, jersey numbers, colleges, draft history, contracts, head coaches and the real 18-week 2026 schedule. This mode is only in `index.html`.
+- **Fictional league:** made-up teams and players. This is the version published as a shareable artifact.
+
+### Where the real data comes from
+
+`tools/build_nfl_data.py` builds `src/nfl_data.js` from public [nflverse](https://github.com/nflverse/nflverse-data) data: rosters, 2025–26 player stats, snap counts, combine results, OverTheCap contracts and schedules. Player OVRs and Superstar X / Star tiers come from this game's own formula. It blends production, playing time, draft position, experience and age, ranked within each position. Speed, Strength and Agility use real combine times where available. No ratings come from Madden or any other game. To refresh the data mid-season, download the newest files and run `python3 tools/build_nfl_data.py <folder>`, then `node build.js`.
 
 ## Play it
 
