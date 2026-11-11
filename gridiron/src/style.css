@@ -263,3 +263,15 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
 
 .pc-sec { display: contents; }
 .pc-tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: rgba(5,12,9,.95); z-index: 2; }
+
+/* ---- broadcast scorebug v2 ---- */
+.scorebug { border-radius: 10px; background: linear-gradient(180deg, #1c2430, #0b0f15); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 10px 30px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.12); padding: 3px; gap: 3px; }
+.sb-team { border-radius: 7px; background: linear-gradient(180deg, color-mix(in srgb, var(--c1) 85%, #fff 15%), var(--c1) 55%, color-mix(in srgb, var(--c1) 70%, #000 30%)); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); position: relative; overflow: hidden; }
+.sb-team::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 40%, rgba(255,255,255,.12) 50%, transparent 60%); }
+.sb-team .sc { font-size: 28px; }
+.sb-team.has .poss { visibility: visible; background: #ffd23f; box-shadow: 0 0 8px #ffd23f; }
+.sb-mid { background: transparent; }
+.sb-mid .clk { font-size: 19px; letter-spacing: .02em; }
+.sb-mid .dd { background: #ffd23f; color: #1a1200; border-radius: 4px; padding: 0 6px; margin-top: 2px; }
+.banner .bt { background: linear-gradient(180deg, #fff 30%, #d8dee6); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 4px 0 rgba(0,0,0,.4)) drop-shadow(0 0 24px rgba(0,0,0,.5)); }
+.banner.big .bt { background: linear-gradient(180deg, #fff4b0 10%, #ffb81c 60%, #ff8a00); -webkit-background-clip: text; background-clip: text; }
