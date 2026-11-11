@@ -3443,20 +3443,40 @@ function grainCanvas(W, H) {
   return cv;
 }
 
-// crowd texture for the stands (cached per home colors)
+// crowd texture: rows of seated fans (heads, shoulders, shirts) in 3 animation frames
 let _crowdPat = null;
-function crowdPattern(ctx, c1, c2) {
+function _rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function crowdPatterns(ctx, c1, c2) {
   const key = c1 + c2;
-  if (_crowdPat && _crowdPat.key === key) return _crowdPat.pat;
-  const cv = _mkCanvas(96, 48), g = cv.getContext('2d');
-  g.fillStyle = '#1a2130'; g.fillRect(0, 0, 96, 48);
-  const pal = [c1, c1, c2, '#e8e8e8', '#9aa2ad', '#d6c4ae', '#5a6372', c1, '#2b3442', '#c0392b', '#2e86de'];
-  for (let y = 2; y < 48; y += 4) for (let x = (y % 8 ? 2 : 0); x < 96; x += 4) {
-    g.fillStyle = pal[(Math.random() * pal.length) | 0]; g.beginPath(); g.arc(x + Math.random(), y + Math.random(), 1.6, 0, Math.PI * 2); g.fill();
+  if (_crowdPat && _crowdPat.key === key) return _crowdPat.pats;
+  const TW = 240, TH = 120, ROW = 15;
+  const shirts = [c1, c1, c1, c2, c1, '#f2f2f2', '#2b3442', '#7f8794', c2, '#1d1d1d', '#b03a2e', '#3f6fb5', c1, '#d9c7a8'];
+  const skins = ['#f1c9a5', '#d9a37a', '#b07a52', '#7b4a2e', '#5a3622', '#e8b892'];
+  const people = []; const r = _rng(7);
+  for (let row = 0; row < TH / ROW; row++) for (let x = (row % 2) * 5; x < TW; x += 10) {
+    if (r() < 0.07) continue; // empty seat
+    people.push({ x: x + r() * 2, y: row * ROW, shirt: shirts[(r() * shirts.length) | 0], skin: skins[(r() * skins.length) | 0], hat: r() < 0.18 ? (r() < 0.6 ? c1 : c2) : null, armP: r(), h: 0.85 + r() * 0.3 });
   }
-  const pat = ctx.createPattern(cv, 'repeat');
-  _crowdPat = { key, pat };
-  return pat;
+  const pats = [0, 1, 2].map(frame => {
+    const cv = _mkCanvas(TW, TH), g = cv.getContext('2d');
+    for (let row = 0; row < TH / ROW; row++) { // seat rows with step shadow
+      g.fillStyle = row % 2 ? '#20283a' : '#1b2232'; g.fillRect(0, row * ROW, TW, ROW);
+      g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, row * ROW + ROW - 3, TW, 3);
+      g.fillStyle = shade(c1, -0.55); g.fillRect(0, row * ROW + ROW - 5, TW, 2);
+    }
+    for (const p of people) {
+      const cheer = frame > 0 && p.armP < (frame === 1 ? 0.3 : 0.65);
+      const bob = frame === 2 && p.armP < 0.65 ? -2 : frame === 1 && p.armP > 0.7 ? -1 : 0;
+      const bx = p.x, by = p.y + ROW - 4 + bob, bh = 7 * p.h;
+      g.fillStyle = p.shirt; g.beginPath(); g.moveTo(bx - 4, by); g.quadraticCurveTo(bx - 4, by - bh, bx, by - bh); g.quadraticCurveTo(bx + 4, by - bh, bx + 4, by); g.fill();
+      if (cheer) { g.strokeStyle = p.shirt; g.lineWidth = 2; g.lineCap = 'round'; g.beginPath(); g.moveTo(bx - 3, by - bh + 1); g.lineTo(bx - 5, by - bh - 6); g.moveTo(bx + 3, by - bh + 1); g.lineTo(bx + 5, by - bh - 6); g.stroke(); g.fillStyle = p.skin; g.fillRect(bx - 6, by - bh - 8, 2, 2); g.fillRect(bx + 4, by - bh - 8, 2, 2); }
+      g.fillStyle = p.skin; g.beginPath(); g.arc(bx, by - bh - 2.6, 2.6, 0, Math.PI * 2); g.fill();
+      if (p.hat) { g.fillStyle = p.hat; g.beginPath(); g.arc(bx, by - bh - 3.4, 2.7, Math.PI, 0); g.fill(); }
+    }
+    return ctx.createPattern(cv, 'repeat');
+  });
+  _crowdPat = { key, pats };
+  return pats;
 }
 
 LiveGame.prototype.render3D = function (ctx, W, H) {
@@ -3485,7 +3505,12 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
     const pp = []; for (const [x, y, h] of pts) { const p = P(Math.max(x, x0), y, h || 0); if (!p) return; pp.push(p); }
     ctx.fillStyle = fill; ctx.beginPath(); ctx.moveTo(pp[0].x, pp[0].y); for (let i = 1; i < pp.length; i++) ctx.lineTo(pp[i].x, pp[i].y); ctx.closePath(); ctx.fill();
   };
-  const crowd = crowdPattern(ctx, homeT.c1, homeT.c2);
+  // crowd animates: bob between frames, stand and cheer on big moments
+  this.cheer = Math.max(0, (this.cheer || 0) - 1 / 240);
+  const pats = crowdPatterns(ctx, homeT.c1, homeT.c2);
+  if (!this._cfT || this.t2 - this._cfT > (this.cheer > 0.2 ? 0.16 : 0.45)) { this._cfT = this.t2; this._cf = this.cheer > 0.2 ? 1 + ((this._cf || 0) % 2) : (Math.random() < 0.85 ? 0 : 1); }
+  const crowd = pats[this._cf || 0];
+  if (crowd.setTransform && typeof DOMMatrix !== 'undefined') crowd.setTransform(new DOMMatrix().scale(clamp(W / 1100, 0.7, 1.6)));
   const xFar = 160;
   // far end: wall + rising crowd behind the end line
   polyH([[124, -40, 2.6], [124, FIELD_W + 40, 2.6], [150, FIELD_W + 60, 22], [150, -60, 22]], crowd);
@@ -3496,6 +3521,7 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
     polyH([[x0, yw, 0], [124, yw, 0], [124, yw, 2.6], [x0, yw, 2.6]], shade(homeT.c1, -0.3));
     polyH([[x0, yw, 2.4], [124, yw, 2.4], [124, yw, 2.75], [x0, yw, 2.75]], homeT.c2);
   }
+  { const sg = ctx.createLinearGradient(0, 0, 0, H * 0.45); sg.addColorStop(0, 'rgba(0,0,0,.35)'); sg.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = sg; ctx.fillRect(0, 0, W, H * 0.45); }
   // crowd camera flashes
   if (this.phase === 'live' || (this.banner && this.banner.big)) {
     const n = this.banner && this.banner.big ? 16 : 4;
@@ -3619,10 +3645,10 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
   }
 
   // ---- bench players (simple tokens, far away) ----
-  if (!this._bench) this._bench = Array.from({ length: 16 }, (_, i) => ({ x: 38 + i * 3 + Math.random(), off: Math.random() * 6 }));
+  if (!this._bench) this._bench = Array.from({ length: 22 }, (_, i) => ({ x: 37 + i * 2.1 + Math.random() * 1.2, off: (i % 3) * 1.1 + Math.random() * 0.6, seed: i + 1 }));
   for (const [side, by] of [[0, -6.5], [1, FIELD_W + 6.5]]) {
     const t = this.teamOf(side);
-    for (const bp of this._bench) { const p = P(bp.x, by + Math.sin(bp.off) * 0.8); if (!p || p.k < 2) continue; benchToken(ctx, p.x, p.y, p.k, t, side === 0); }
+    for (const bp of this._bench.slice().sort((a, b) => (side === 0 ? a.off - b.off : b.off - a.off))) { const p = P(bp.x, by + (side === 0 ? -bp.off : bp.off)); if (!p || p.k < 2) continue; benchToken(ctx, p.x, p.y, p.k, t, side === 0, bp.seed); }
   }
 
   // ---- particles on the ground (dust) ----
@@ -3641,7 +3667,7 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
     const p = P(e.x, e.y); if (!p) continue;
     const side = e.side === 'O' ? gs.poss : 1 - gs.poss;
     const sp = Math.hypot(e.vx, e.vy); e.phase = (e.phase || Math.random() * 6) + sp * 0.032;
-    drawFigure(ctx, p.x, p.y, p.k, e, this.teamOf(side), side === 0, sp, e === this.ctrl, e === carrier && this.ball && this.ball.state === 'held');
+    drawFigure(ctx, p.x, p.y, p.k, e, this.teamOf(side), side === 0, sp, e === this.ctrl, e === carrier && this.ball && this.ball.state === 'held', this.poseFor(e));
     if (e === this.ctrl && e.p) {
       const label = e.p.last.toUpperCase(), fs = Math.round(clamp(p.k * 0.42, 11, 16));
       ctx.font = `800 ${fs}px 'Saira Condensed', system-ui`; const tw = ctx.measureText(label).width + 10;
@@ -3720,16 +3746,23 @@ function drawBall(ctx, x, y, r, spin) {
   ctx.restore();
 }
 
-function benchToken(ctx, X, Y, k, t, home) {
-  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(X - 0.3 * k, Y - 0.05 * k, 0.6 * k, 0.1 * k);
-  ctx.fillStyle = home ? t.c1 : '#e8e8e8'; ctx.fillRect(X - 0.3 * k, Y - 1.6 * k, 0.6 * k, 0.8 * k);
-  ctx.fillStyle = home ? '#e6e6e6' : t.c1; ctx.fillRect(X - 0.25 * k, Y - 0.8 * k, 0.5 * k, 0.75 * k);
-  ctx.fillStyle = t.c1; ctx.beginPath(); ctx.arc(X, Y - 1.8 * k, 0.24 * k, 0, Math.PI * 2); ctx.fill();
+function benchToken(ctx, X, Y, k, t, home, seed) {
+  // a small standing player: legs, pants, jersey with shoulder pads, helmet; slight variety per seed
+  const j = home ? t.c1 : '#eeeeee', pn = home ? '#e6e6e6' : t.c1, h = 1 + ((seed * 37) % 10) / 60, lean = (((seed * 13) % 7) - 3) * 0.02;
+  ctx.save(); ctx.translate(X, Y); ctx.rotate(lean);
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(-0.1 * k, 0, 0.4 * k, 0.12 * k, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = home ? t.c1 : shade(t.c1, -0.1); ctx.fillRect(-0.22 * k, -0.45 * k * h, 0.17 * k, 0.45 * k * h); ctx.fillRect(0.05 * k, -0.45 * k * h, 0.17 * k, 0.45 * k * h);
+  ctx.fillStyle = pn; ctx.fillRect(-0.24 * k, -0.9 * k * h, 0.48 * k, 0.48 * k * h);
+  ctx.fillStyle = j; ctx.beginPath(); ctx.moveTo(-0.4 * k, -1.55 * k * h); ctx.lineTo(0.4 * k, -1.55 * k * h); ctx.lineTo(0.3 * k, -0.86 * k * h); ctx.lineTo(-0.3 * k, -0.86 * k * h); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = shade(j, -0.2); ctx.fillRect(-0.44 * k, -1.52 * k * h, 0.14 * k, 0.4 * k); ctx.fillRect(0.3 * k, -1.52 * k * h, 0.14 * k, 0.4 * k);
+  ctx.fillStyle = t.c1; ctx.beginPath(); ctx.arc(0, -1.75 * k * h, 0.21 * k, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.arc(-0.07 * k, -1.82 * k * h, 0.07 * k, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 }
 
 // one player figure, feet at (X, Y), k = pixels per yard at that depth
 const BUILD = { OL: [1.28, 0.98], DL: [1.2, 1.0], TE: [1.08, 1.02], LB: [1.08, 1.0], RB: [1.0, 0.95], QB: [0.98, 1.02], WR: [0.9, 1.0], CB: [0.88, 0.97], S: [0.95, 1.0] };
-function drawFigure(ctx, X, Y, k, e, team, home, sp, selected, hasBall) {
+function drawFigure(ctx, X, Y, k, e, team, home, sp, selected, hasBall, pose) {
   const pos = e.role.replace(/[0-9]/, '');
   const [bw, bh] = BUILD[pos] || [1, 1];
   const jersey = home ? team.c1 : '#f4f4f4', trim = home ? team.c2 : team.c1, pants = home ? '#ececec' : shade(team.c1, -0.05);
@@ -3756,7 +3789,13 @@ function drawFigure(ctx, X, Y, k, e, team, home, sp, selected, hasBall) {
   }
   ctx.save();
   ctx.translate(X, Y - bob);
-  if (down) { ctx.rotate(1.15); ctx.translate(0, 0.35 * k); }
+  // body rotation for falls, wrap-ups, dives and stumbles (pivot at the feet)
+  const pt = pose && pose.type, pk = pose ? pose.k : 0, ease = 1 - Math.pow(1 - pk, 3), pdir = pose && pose.dir ? pose.dir : 1;
+  if (pt === 'down') { ctx.rotate(pdir * ease * 1.45); ctx.translate(0, ease * 0.2 * k); }
+  else if (pt === 'wrap') { ctx.rotate(pdir * ease * 1.25); ctx.translate(0, ease * 0.25 * k); }
+  else if (pt === 'dive') ctx.rotate(pdir * 1.05);
+  else if (pt === 'celebrate') ctx.translate(0, -Math.abs(Math.sin(pk * 14)) * 0.25 * k);
+  else if (down) ctx.rotate(Math.sin((e.stun || 0) * 9) * 0.35);
   ctx.scale(bw, bh);
   const kk = k; // local units
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -3794,7 +3833,28 @@ function drawFigure(ctx, X, Y, k, e, team, home, sp, selected, hasBall) {
     ctx.strokeStyle = skin; ctx.lineWidth = 0.14 * kk; ctx.beginPath(); ctx.moveTo(elx, ely); ctx.lineTo(hx, hy); ctx.stroke();
     ctx.fillStyle = pos === 'OL' || pos === 'DL' ? '#222' : trim; ctx.beginPath(); ctx.arc(hx, hy, 0.08 * kk, 0, Math.PI * 2); ctx.fill();
   };
-  arm(-0.46 * kk, -st); arm(0.46 * kk, st);
+  // arm to an exact hand position (local units), elbow bowed outward
+  const armTo = (dx, hx, hy) => {
+    const sx = dx, sy = tTop + 0.12 * kk, mx = (sx + hx) / 2 + Math.sign(dx) * 0.12 * kk, my = (sy + hy) / 2 + 0.05 * kk;
+    ctx.strokeStyle = outline; ctx.lineWidth = 0.22 * kk; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(mx, my); ctx.lineTo(hx, hy); ctx.stroke();
+    ctx.strokeStyle = jersey; ctx.lineWidth = 0.18 * kk; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(mx, my); ctx.stroke();
+    ctx.strokeStyle = skin; ctx.lineWidth = 0.14 * kk; ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(hx, hy); ctx.stroke();
+    ctx.fillStyle = pos === 'OL' || pos === 'DL' ? '#222' : trim; ctx.beginPath(); ctx.arc(hx, hy, 0.08 * kk, 0, Math.PI * 2); ctx.fill();
+  };
+  const L_ = -0.46 * kk, R_ = 0.46 * kk;
+  let ballAt = hasBall ? [0.32 * kk, tTop + 0.42 * kk] : null;
+  if (pt === 'qbready') { armTo(L_, 0.05 * kk, tTop + 0.18 * kk); armTo(R_, 0.3 * kk, tTop + 0.08 * kk); if (hasBall) ballAt = [0.2 * kk, tTop + 0.05 * kk]; }
+  else if (pt === 'throw') {
+    if (pk < 0.3) { armTo(L_, -0.15 * kk, tTop + 0.25 * kk); armTo(R_, 0.6 * kk, tTop - 0.5 * kk); }
+    else { const f = (pk - 0.3) / 0.7; armTo(L_, -0.55 * kk, tTop + 0.55 * kk); armTo(R_, (0.35 - f * 0.65) * kk, tTop + (-0.35 + f * 0.95) * kk); }
+  }
+  else if (pt === 'reach') { const o = pdir * 0.15 * kk; armTo(L_, -0.2 * kk + o, tTop - 0.6 * kk); armTo(R_, 0.2 * kk + o, tTop - 0.6 * kk); }
+  else if (pt === 'secure') { armTo(L_, -0.05 * kk, tTop + 0.38 * kk); armTo(R_, 0.08 * kk, tTop + 0.34 * kk); if (hasBall) ballAt = [0.02 * kk, tTop + 0.36 * kk]; }
+  else if (pt === 'block' || pt === 'wrap' || pt === 'dive') { const f = pdir * (pt === 'block' ? 0.45 : 0.7) * kk; armTo(L_, f - 0.12 * kk, tTop + 0.28 * kk); armTo(R_, f + 0.12 * kk, tTop + 0.32 * kk); }
+  else if (pt === 'celebrate') { armTo(L_, -0.5 * kk, tTop - 0.75 * kk); armTo(R_, 0.5 * kk, tTop - 0.75 * kk); if (hasBall) ballAt = [0.52 * kk, tTop - 0.85 * kk]; }
+  else if (pt === 'swat') { arm(L_, -st); armTo(R_, pdir * 0.35 * kk, tTop - 0.75 * kk); }
+  else if (pt === 'incomp') { armTo(L_, -0.8 * kk, tTop + 0.15 * kk); armTo(R_, 0.8 * kk, tTop + 0.15 * kk); }
+  else { arm(L_, -st); arm(R_, st); }
   // number (back for offense, chest for defense)
   if (k >= 10) {
     ctx.save(); ctx.scale(1 / bw, 1 / bh);
@@ -3819,7 +3879,7 @@ function drawFigure(ctx, X, Y, k, e, team, home, sp, selected, hasBall) {
   } else { // back of the helmet: neck + collar
     ctx.fillStyle = skin; ctx.fillRect(-hr * 0.35, hy + hr * 0.75, hr * 0.7, hr * 0.35);
   }
-  if (hasBall) drawBall(ctx, 0.32 * kk, tTop + 0.42 * kk, 0.18 * kk, 0);
+  if (ballAt) drawBall(ctx, ballAt[0], ballAt[1], 0.18 * kk, 0);
   ctx.restore(); ctx.restore();
   if (selected) {
     const ty = Y - 2.45 * k * bh;
@@ -3843,6 +3903,53 @@ LiveGame.prototype.receiverAt = function (px, py) {
     if (d < Math.max(40, p.k * 1.6) && d < bd) { bd = d; best = e; }
   }
   return best;
+};
+
+
+// ---------- animation state ----------
+LiveGame.prototype.poseFor = function (e) {
+  const a = e.anim, now = this.t2 || 0;
+  if (a) { const k = (now - a.t0) / a.dur; if (k < 1 || a.hold) return { type: a.type, k: clamp(k, 0, 1), dir: a.dir || 1 }; }
+  const pl = this.play, b = this.ball; if (!pl || this.phase !== 'live') return null;
+  const car = this.carrier();
+  if (e.dive > 0 && car) return { type: 'dive', k: 1, dir: Math.sign(car.y - e.y) || 1 };
+  if (e.eng) return { type: 'block', k: 1, dir: Math.sign(e.eng.y - e.y) || (e.side === 'O' ? 1 : -1) };
+  if (b && b.state === 'air') {
+    const left = b.T - b.t;
+    if (pl.target === e && left < 0.6) return { type: 'reach', k: 1, dir: Math.sign(b.ty - e.y) || 1 };
+    if (e.side !== (pl.target ? pl.target.side : 'O') && e.ballChase && left < 0.45 && Math.hypot(e.x - b.tx, e.y - b.ty) < 2.6) return { type: 'swat', k: 1, dir: Math.sign(b.ty - e.y) || 1 };
+  }
+  if (car === e && e === this.passer && this.passReady && !pl.thrown && !pl.crossed) return { type: 'qbready', k: 1 };
+  return null;
+};
+const _throwAnim = LiveGame.prototype.throwBall;
+LiveGame.prototype.throwBall = function (r) {
+  const qb = this.passer, was = this.play.thrown;
+  _throwAnim.call(this, r);
+  if (!was && this.play.thrown && qb) qb.anim = { type: 'throw', t0: this.t2, dur: 0.55 };
+};
+const _resolveAnim = LiveGame.prototype.resolvePass;
+LiveGame.prototype.resolvePass = function () {
+  const r = this.play.target;
+  _resolveAnim.call(this);
+  const pl = this.play;
+  if (!r) return;
+  if (pl.caught && this.ball.holder === r) r.anim = { type: 'secure', t0: this.t2, dur: 0.45 };
+  else if (pl.int) { this.cheer = 1; }
+  else if (!pl.caught) r.anim = { type: 'incomp', t0: this.t2, dur: 0.9, hold: true };
+};
+const _endPlayAnim = LiveGame.prototype.endPlay;
+LiveGame.prototype.endPlay = function (kind, msg) {
+  const c = this.carrier(), tk = this.tackler, s0 = this.gs.score.slice(), y0 = this.gs.yard, los = this.los;
+  _endPlayAnim.call(this, kind, msg);
+  const now = this.t2 || 0;
+  if (c && kind === 'tackle') {
+    const dir = tk ? (Math.sign(c.y - tk.y) || (chance(0.5) ? 1 : -1)) : (chance(0.5) ? 1 : -1);
+    c.anim = { type: 'down', t0: now, dur: 0.4, dir, hold: true };
+    if (tk) tk.anim = { type: 'wrap', t0: now, dur: 0.32, dir, hold: true };
+  }
+  if (c && (this.gs.score[0] - s0[0] >= 6 || this.gs.score[1] - s0[1] >= 6)) { c.anim = { type: 'celebrate', t0: now, dur: 2.5, hold: true }; this.cheer = 1; }
+  else if (c && c.x - (los || 0) >= 15) this.cheer = Math.max(this.cheer || 0, 0.7);
 };
 
 // ============================================================
