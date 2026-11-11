@@ -76,7 +76,7 @@ function setupGo() {
 }
 
 // ============================================================ HUB
-const TABS = [['home', 'Home'], ['roster', 'Roster'], ['depth', 'Depth Chart'], ['schedule', 'Schedule'], ['standings', 'Standings'], ['stats', 'Leaders'], ['trade', 'Trade'], ['fa', 'Free Agents'], ['draft', 'Draft'], ['history', 'History'], ['settings', 'Settings']];
+const TABS = [['home', 'Home'], ['lineup', 'Lineup'], ['roster', 'Roster'], ['depth', 'Depth Chart'], ['schedule', 'Schedule'], ['standings', 'Standings'], ['stats', 'Leaders'], ['trade', 'Trade'], ['fa', 'Free Agents'], ['draft', 'Draft'], ['history', 'History'], ['settings', 'Settings']];
 function renderHub() {
   show('hub');
   const L = LEAGUE, t = UT(), o = teamOvr(L, t);
@@ -88,7 +88,7 @@ function renderHub() {
   const dotTab = { home: ['recap', 'resign', 'fa', 'draft'].includes(L.phase), draft: L.phase === 'draft', fa: L.phase === 'fa' };
   $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${n}${dotTab[k] ? '<span class="dot"></span>' : ''}</button>`).join('');
   const P = $('#panel');
-  const fn = { home: viewHome, roster: viewRoster, depth: viewDepth, schedule: viewSchedule, standings: viewStandings, stats: viewStats, trade: viewTrade, fa: viewFA, draft: viewDraft, history: viewHistory, settings: viewSettings }[TAB];
+  const fn = { home: viewHome, lineup: viewLineup, roster: viewRoster, depth: viewDepth, schedule: viewSchedule, standings: viewStandings, stats: viewStats, trade: viewTrade, fa: viewFA, draft: viewDraft, history: viewHistory, settings: viewSettings }[TAB];
   P.innerHTML = fn();
   if (TAB === 'trade') tradeRefresh();
 }

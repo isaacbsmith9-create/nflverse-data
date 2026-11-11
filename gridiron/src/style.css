@@ -282,3 +282,39 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
 .offer { display: grid; gap: 10px; padding: 12px; }
 .offer-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 640px) { .offer-cols { grid-template-columns: 1fr; } }
+
+/* ---- adjust lineup ---- */
+.lu-field { position: relative; height: clamp(420px, 56vw, 600px); border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  background: repeating-linear-gradient(180deg, #2b7f39 0 10%, #2f8a3e 10% 20%); box-shadow: inset 0 0 60px rgba(0,0,0,.45); }
+.lu-field::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(180deg, transparent 0 calc(10% - 2px), rgba(255,255,255,.35) calc(10% - 2px) 10%); pointer-events: none; }
+.lu-los { position: absolute; left: 0; right: 0; top: 64%; height: 3px; background: rgba(90,165,255,.9); box-shadow: 0 0 10px rgba(90,165,255,.8); }
+.lu-field.def .lu-los { top: 88%; }
+.lu-card { position: absolute; transform: translate(-50%, -50%); width: clamp(76px, 11vw, 132px); display: grid; gap: 2px; justify-items: center; text-align: center;
+  padding: 6px 6px 8px; border-radius: 10px; border: 1px solid rgba(255,255,255,.18); cursor: pointer; color: var(--fg);
+  background: linear-gradient(180deg, rgba(22,40,34,.96), rgba(9,18,15,.96)); box-shadow: 0 8px 18px rgba(0,0,0,.45); font: inherit; }
+.lu-card:hover, .lu-card:focus-visible { border-color: var(--amber); transform: translate(-50%, -52%); }
+.lu-card.x { border-color: #ffb81c; box-shadow: 0 0 16px rgba(255,184,28,.45), 0 8px 18px rgba(0,0,0,.45); }
+.lu-card.out { border-color: var(--red); }
+.lu-card.empty { opacity: .7; border-style: dashed; }
+.lu-top { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 4px; }
+.lu-pos { font: 800 12px/1 var(--f-display); letter-spacing: .08em; color: var(--amber); }
+.lu-num { font: 800 clamp(18px, 2.4vw, 26px)/1 var(--f-display); opacity: .9; }
+.lu-name { font: 700 clamp(12px, 1.25vw, 15px)/1.1 var(--f-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.lu-age { font-size: 11px; color: var(--muted); }
+.lu-out { font: 700 10px/1.2 var(--f-body); color: #ffd2ce; }
+.lu-card .devb { font-size: 10px; padding: 1px 6px; }
+.lu-grade { display: flex; gap: 10px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.lu-grade .g { width: 34px; text-align: center; border-radius: 6px; padding: 3px 0; font: 800 15px/1 var(--f-display); }
+.g-a { background: #ffb81c; color: #1a1200; } .g-b { background: #45d483; color: #04210f; } .g-c { background: #2c6e8f; color: #e6f6ff; } .g-d { background: #6b2a26; color: #ffd2ce; }
+.lu-need { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.lu-need b { font: 800 18px/1 var(--f-display); color: var(--amber); width: 34px; }
+.lu-pick { width: 100%; background: none; border: 0; color: var(--fg); text-align: left; font: inherit; border-radius: 6px; }
+.lu-pick.cur { background: rgba(255,184,28,.1); }
+@media (max-width: 700px) {
+  /* phones: cards in a 3-wide grid, still in formation order */
+  .lu-field { height: auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px; }
+  .lu-field::before, .lu-los { display: none; }
+  .lu-card { position: static; transform: none !important; width: auto; }
+  .lu-card .lu-age { display: none; }
+  .lu-head h2 { flex-basis: 100%; }
+}
