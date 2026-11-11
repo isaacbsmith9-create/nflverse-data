@@ -76,7 +76,7 @@ function setupGo() {
 }
 
 // ============================================================ HUB
-const TABS = [['home', 'Home'], ['lineup', 'Lineup'], ['roster', 'Roster'], ['depth', 'Depth Chart'], ['dev', 'Development'], ['cap', 'Contracts'], ['schedule', 'Schedule'], ['standings', 'Standings'], ['stats', 'Leaders'], ['trade', 'Trade'], ['fa', 'Free Agents'], ['scout', 'Scouting'], ['draft', 'Draft'], ['history', 'History'], ['settings', 'Settings']];
+const TABS = [['home', 'Home'], ['lineup', 'Lineup'], ['roster', 'Roster'], ['depth', 'Depth Chart'], ['dev', 'Development'], ['cap', 'Contracts'], ['schedule', 'Schedule'], ['standings', 'Standings'], ['stats', 'Leaders'], ['trade', 'Trade'], ['fa', 'Free Agents'], ['scout', 'Scouting'], ['draft', 'Draft'], ['history', 'History'], ['records', 'Records'], ['playbook', 'Playbook'], ['settings', 'Settings']];
 function renderHub() {
   show('hub');
   const L = LEAGUE, t = UT(), o = teamOvr(L, t);
@@ -88,7 +88,7 @@ function renderHub() {
   const dotTab = { home: ['recap', 'resign', 'fa', 'draft'].includes(L.phase), draft: L.phase === 'draft', fa: L.phase === 'fa' };
   $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${n}${dotTab[k] ? '<span class="dot"></span>' : ''}</button>`).join('');
   const P = $('#panel');
-  const fn = { home: viewHome, lineup: viewLineup, dev: viewDev, cap: viewCap, scout: viewScout, roster: viewRoster, depth: viewDepth, schedule: viewSchedule, standings: viewStandings, stats: viewStats, trade: viewTrade, fa: viewFA, draft: viewDraft, history: viewHistory, settings: viewSettings }[TAB];
+  const fn = { home: viewHome, lineup: viewLineup, dev: viewDev, cap: viewCap, scout: viewScout, roster: viewRoster, depth: viewDepth, schedule: viewSchedule, standings: viewStandings, stats: viewStats, trade: viewTrade, fa: viewFA, draft: viewDraft, history: viewHistory, records: viewRecords, playbook: viewPlaybook, settings: viewSettings }[TAB];
   P.innerHTML = fn();
   if (TAB === 'trade') tradeRefresh();
 }
@@ -388,7 +388,8 @@ function viewSettings() {
   return `<div class="card stack"><h2>Game settings</h2>
     <label>Difficulty <select data-act="set" data-key="diff">${[['rookie', 'Rookie'], ['pro', 'Pro'], ['allpro', 'All-Pro'], ['legend', 'Legend']].map(([k, n]) => `<option value="${k}" ${s.diff === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
     <label>Quarter length <select data-act="set" data-key="qlen">${[[120, '2 min'], [180, '3 min'], [240, '4 min'], [300, '5 min'], [480, '8 min']].map(([k, n]) => `<option value="${k}" ${+s.qlen === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-    <label class="row" style="gap:8px"><input type="checkbox" data-act="set" data-key="simDef" ${s.simDef ? 'checked' : ''}> <b>Offense only</b>: the CPU's drives are simulated, you only play offense</label></div>
+    <label class="row" style="gap:8px"><input type="checkbox" data-act="set" data-key="simDef" ${s.simDef ? 'checked' : ''}> <b>Offense only</b>: the CPU's drives are simulated, you only play offense</label>
+    <label class="row" style="gap:8px"><input type="checkbox" data-act="set" data-key="penalties" ${s.penalties !== false ? 'checked' : ''}> <b>Penalties</b>: offsides, false starts, holding and pass interference</label></div>
     <div class="card stack"><h2>Save &amp; backup</h2><div class="muted small">Franchise slot ${SLOT}. The game saves automatically after every action.</div>
     <div class="row"><button class="btn" data-act="save-now">Save now</button><button class="btn" data-act="export">Export save</button><button class="btn" data-act="import">Import save</button></div></div>
     <div class="card stack"><h2>Danger zone</h2><div class="row"><button class="btn danger" data-act="del-current">Delete this franchise</button></div></div>`;
@@ -519,6 +520,8 @@ document.addEventListener('click', e => {
     case 'toggle-simdef': { LEAGUE.settings.simDef = !LEAGUE.settings.simDef; save(); $('#simDefBtn').textContent = 'Offense only: ' + (LEAGUE.settings.simDef ? 'On' : 'Off'); toast(LEAGUE.settings.simDef ? 'Offense only ON: the CPU\'s drives will be simulated.' : 'Offense only OFF: you play defense too.'); break; }
     case 'toggle-cam': if (GAME) { const order = ['gl', '3d', 'top'], cur = GAME.live.camMode; const m = order[(order.indexOf(cur) + 1) % order.length]; GAME.live.camMode = m; LEAGUE.settings.cam2 = m; save(); toast({ gl: 'Camera: 3D', '3d': 'Camera: Classic broadcast', top: 'Camera: Top-down' }[m]); } break;
     case 'toggle-sound': window.__mute = !window.__mute; try { localStorage.setItem('gd_mute', window.__mute ? '1' : '0'); } catch (e) { } toast(window.__mute ? 'Sound off' : 'Sound on'); break;
+    case 'pc-timeout': if (GAME) { const lg = GAME.live; if (useTimeout(lg.gs, lg.user)) { toast(`Timeout. ${lg.gs.timeouts[lg.user]} left.`); lg.h.update(); showPlayCall(lg.userOnOffense() ? 'off' : 'def'); } } break;
+    case 'pc-nohuddle': if (GAME) { const lg = GAME.live; lg.gs.noHuddle[lg.user] = !lg.gs.noHuddle[lg.user]; toast(lg.gs.noHuddle[lg.user] ? 'No-huddle ON: less time between plays.' : 'No-huddle OFF.'); showPlayCall('off'); } break;
     case 'call-play': if (GAME) { $('#playcall').hidden = true; GAME.live.choose(el.dataset.id); } break;
     case 'call-auto': if (GAME) { $('#playcall').hidden = true; const lg = GAME.live; lg.choose(lg.userOnOffense() ? autoOffCall(lg.gs) : cpuDefCall(lg.gs).id); } break;
     case 'offense-only-now': if (GAME) { LEAGUE.settings.simDef = true; save(); $('#simDefBtn').textContent = 'Offense only: On'; $('#playcall').hidden = true; toast('Offense only ON. Turn it off any time in the pause menu.'); GAME.live.next(); } break;
@@ -622,7 +625,7 @@ function updateHUD() {
   const q = gs.quarter <= 4 ? 'Q' + gs.quarter : 'OT';
   const lg = GAME.live;
   const clock = lg.phase === 'live' ? Math.max(0, gs.clock - lg.t) : gs.clock;
-  const sbt = s => `<div class="sb-team ${gs.poss === s ? 'has' : ''}" style="--c1:${tm(s).c1}"><span class="poss"></span><span class="emb xs">${emblemSVG(tm(s))}</span><span class="ab">${tm(s).abbr}</span><span class="sc">${gs.score[s]}</span></div>`;
+  const sbt = s => `<div class="sb-team ${gs.poss === s ? 'has' : ''}" style="--c1:${tm(s).c1}"><span class="poss"></span><span class="emb xs">${emblemSVG(tm(s))}</span><span class="ab">${tm(s).abbr}</span><span class="sc">${gs.score[s]}</span><span class="tos">${[0, 1, 2].map(i => `<i class="${i < (gs.timeouts ? gs.timeouts[s] : 3) ? 'on' : ''}"></i>`).join('')}</span></div>`;
   $('#scorebug').innerHTML = `${sbt(1)}<div class="sb-mid"><div class="clk">${q} ${fmtClock(clock)}</div><div class="dd">${downStr(gs)} · ${yardStr(gs)}</div></div>${sbt(0)}`;
   // hint + action button label
   const ph = lg.phase; let hint = '', act = 'Action';
@@ -653,7 +656,7 @@ function updateHUD() {
 let _hudT = 0; function hudTick() { const n = performance.now(); if (n - _hudT > 150) { _hudT = n; updateHUD(); } }
 
 function showBanner(b) {
-  const el = $('#banner'); el.className = 'banner' + (b.big ? ' big' : ''); el.innerHTML = `<div class="bt">${esc(b.title)}</div>${b.sub ? `<div class="bs">${esc(b.sub)}</div>` : ''}`;
+  const el = $('#banner'); el.className = 'banner' + (b.big ? ' big' : '') + (/^FLAG/.test(b.title) ? ' flag' : ''); el.innerHTML = `<div class="bt">${esc(b.title)}</div>${b.sub ? `<div class="bs">${esc(b.sub)}</div>` : ''}`;
   el.hidden = false; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
   clearTimeout(showBanner._t); showBanner._t = setTimeout(() => el.hidden = true, b.big ? 2300 : 1500);
 }
@@ -698,6 +701,14 @@ function playSVG(play, kind) {
 }
 
 let PC_TAB = 'All';
+function clockBar(lg, mode) {
+  const gs = lg.gs, u = lg.user; if (u < 0 || !gs.timeouts) return '';
+  const left = gs.timeouts[u], saves = (gs.lastRunoff || 0) > 0;
+  return `<div class="pc-clock row"><span class="small">Timeouts <b class="tos big">${[0, 1, 2].map(i => `<i class="${i < left ? 'on' : ''}"></i>`).join('')}</b></span>
+    <button class="btn sm ${saves && left ? 'primary' : ''}" data-act="pc-timeout" ${left && saves ? '' : 'disabled'} title="Stops the clock and gets back the time that ran since the last play">Timeout${saves ? ` (save ${Math.round(gs.lastRunoff)}s)` : ''}</button>
+    ${mode === 'off' ? `<button class="btn sm ${gs.noHuddle[u] ? 'primary' : ''}" data-act="pc-nohuddle">No-huddle: ${gs.noHuddle[u] ? 'ON' : 'OFF'}</button>` : ''}
+    ${twoMinuteTime(gs) ? '<span class="pill red">Two-minute drill</span>' : ''}</div>`;
+}
 function showPlayCall(mode, audible) {
   const lg = GAME.live, gs = lg.gs, L = LEAGUE;
   const el = $('#playcall');
@@ -713,14 +724,16 @@ function showPlayCall(mode, audible) {
       if (gs.down === 4 && fp > 0.02) specials.push(`<button class="play special" data-act="call-play" data-id="fakefg"><span class="tag">Fake</span><span class="pn">Fake Field Goal</span><span class="pd">The holder pops up and throws.</span></button>`);
     }
     if (gs.score[gs.poss] > gs.score[1 - gs.poss] && gs.quarter >= 4 && gs.clock < 150) specials.push(`<button class="play special" data-act="call-play" data-id="kneel"><span class="tag">Clock</span><span class="pn">QB Kneel</span><span class="pd">Run out the clock.</span></button>`);
-    const cats = ['Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
+    if (twoMinuteTime(gs) && (gs.lastRunoff || 0) > 0 && gs.down < 4) specials.unshift(`<button class="play special" data-act="call-play" data-id="spike"><span class="tag">Clock</span><span class="pn">Spike</span><span class="pd">Stop the clock now. Costs a down.</span></button>`);
+    const cats = ['My Plays', 'Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
     cards = specials.join('') + cats.map(c => { const ps = OFF_PLAYS.filter(p => (p.cat || 'Pass') === c); if (!ps.length) return ''; return `<div class="pc-sec" data-cat="${c}" ${PC_TAB !== 'All' && PC_TAB !== c ? 'hidden' : ''}><h3 class="pc-cat">${c === 'Trick' ? 'Trick plays' : c === 'RPO' ? 'RPOs' : c} <span class="muted small">${ps.length}</span></h3>` + ps.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'off')}<span class="tag">${c}</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('') + '</div>'; }).join('');
   } else {
     cards = DEF_PLAYS.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'def')}<span class="tag">Defense</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('');
   }
   el.innerHTML = `<div class="pc-inner wrap"><div class="pc-head"><h2>${audible ? 'Audible' : mode === 'off' ? 'Call your play' : 'Call your defense'}</h2><span class="pill amber">${sit}</span><span class="grow"></span>
     <button class="btn sm" data-act="call-auto">Ask coach</button><button class="btn sm" data-act="sim-drive">Sim this drive</button>${mode === 'def' ? '<button class="btn sm primary" data-act="offense-only-now">Offense only from now on</button>' : ''}<button class="btn sm ghost" data-act="sim-game-rest">Sim rest of game</button></div>
-    ${mode === 'off' ? `<div class="pc-tabs">${['All', 'Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'].map(t => `<button class="tab ${PC_TAB === t ? 'on' : ''}" data-act="pc-tab" data-cat="${t}">${t === 'Trick' ? 'Trick plays' : t}</button>`).join('')}</div>` : ''}
+    ${clockBar(lg, mode)}
+    ${mode === 'off' ? `<div class="pc-tabs">${['All', ...(OFF_PLAYS.some(p => p.custom) ? ['My Plays'] : []), 'Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'].map(t => `<button class="tab ${PC_TAB === t ? 'on' : ''}" data-act="pc-tab" data-cat="${t}">${t === 'Trick' ? 'Trick plays' : t}</button>`).join('')}</div>` : ''}
     <div class="plays">${cards}</div></div>`;
   el.hidden = false;
 }

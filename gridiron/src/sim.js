@@ -20,6 +20,7 @@ function newGameState(L, hid, aid, opts = {}) {
     const b = { rookie: -6, pro: 0, allpro: 4, legend: 8 }[gs.diff] || 0;
     const c = gs.rt[1 - gs.userSide]; for (const k in c) c[k] += b;
   }
+  gs.timeouts = [3, 3]; gs.noHuddle = [false, false]; gs.tmw = {}; gs.lastRunoff = 0; gs.pens = [[0, 0], [0, 0]];
   gs.opening = chance(0.5) ? 0 : 1;
   kickoff(gs, gs.opening, true);
   return gs;
@@ -96,21 +97,26 @@ function fgProb(k, dist) {
 
 // time management + quarter transitions. returns true if game over
 function runClock(gs, sec) {
+  const before = gs.clock;
   gs.clock -= sec;
+  // two-minute warning: the clock stops at 2:00 of each half
+  if ((gs.quarter === 2 || gs.quarter === 4) && gs.qlen > 150 && before > 120 && gs.clock <= 120 && gs.tmw && !gs.tmw[gs.quarter]) {
+    gs.tmw[gs.quarter] = true; gs.clock = 120; gs.lastRunoff = 0; logp(gs, '— Two-minute warning —'); return false;
+  }
   if (gs.clock > 0) return false;
   gs.clock = 0;
   return endQuarter(gs);
 }
 function endQuarter(gs) {
   if (gs.quarter === 2) {
-    gs.quarter = 3; gs.clock = gs.qlen; logp(gs, '— Halftime —', true);
+    gs.quarter = 3; gs.clock = gs.qlen; gs.timeouts = [3, 3]; gs.lastRunoff = 0; logp(gs, '— Halftime —', true);
     kickoff(gs, 1 - gs.opening); return false;
   }
   if (gs.quarter < 4) { gs.quarter++; gs.clock = gs.qlen; logp(gs, `— End of Q${gs.quarter - 1} —`); return false; }
   // end of 4th or OT
   if (gs.score[0] !== gs.score[1]) { gs.over = true; return true; }
   if (gs.quarter >= 5 && !gs.playoff) { gs.over = true; logp(gs, 'Game ends in a TIE.', true); return true; }
-  gs.quarter++; gs.clock = Math.min(600, gs.qlen); gs.otPoss = 0;
+  gs.quarter++; gs.clock = Math.min(600, gs.qlen); gs.otPoss = 0; gs.timeouts = [2, 2]; gs.lastRunoff = 0;
   logp(gs, gs.quarter === 5 ? '— OVERTIME —' : '— Another OT period —', true);
   kickoff(gs, chance(0.5) ? 0 : 1);
   return false;
@@ -166,9 +172,11 @@ function _applyPlay(gs, res) {
     if (gs.down > 4) { logp(gs, 'Turnover on downs.'); setBall(gs, def, 100 - gs.yard); stop = true; }
   }
   // clock: running unless stopped; hurry-up late in halves
-  let t = res.elapsed;
-  if (!stop) t += hurry(gs, off) ? 8 : gs.runoff;
-  runClock(gs, t);
+  // time that runs between plays is remembered so a timeout or spike can save it
+  const runoff = stop ? 0 : (hurry(gs, off) || (gs.noHuddle && gs.noHuddle[off])) ? 8 : gs.runoff;
+  const q0 = gs.quarter;
+  runClock(gs, res.elapsed + runoff);
+  gs.lastRunoff = gs.quarter === q0 ? Math.min(runoff, gs.qlen - gs.clock) : 0;
 }
 function hurry(gs, side) {
   const late = (gs.quarter === 2 || gs.quarter >= 4) && gs.clock < 150;

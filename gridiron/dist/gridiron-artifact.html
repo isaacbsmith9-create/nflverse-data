@@ -337,6 +337,41 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
 
 #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
+/* ---- timeouts, flags, two-minute drill ---- */
+.sb-team .tos { position: absolute; left: 10px; right: 10px; bottom: 2px; display: flex; gap: 3px; z-index: 1; }
+.tos i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,.22); }
+.tos i.on { background: #ffd23f; }
+.tos.big { display: inline-flex; gap: 4px; vertical-align: middle; margin-left: 4px; }
+.tos.big i { width: 16px; flex: none; height: 6px; background: var(--bg3); border: 1px solid var(--line); }
+.tos.big i.on { background: var(--amber); border-color: var(--amber); }
+.pc-clock { gap: 10px; align-items: center; margin: 4px 0 10px; flex-wrap: wrap; }
+.banner.flag .bt { background: none; color: #ffd23f; -webkit-text-fill-color: #ffd23f; }
+.banner.flag .bt::before { content: "🚩 "; }
+
+/* ---- records ---- */
+.ap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.ap { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--bg3); border-radius: 8px; font-size: 14px; }
+.ap .pos-chip { font-size: 11px; padding: 1px 6px; }
+.retnum { display: flex; flex-direction: column; align-items: center; padding: 8px 14px; border: 2px solid var(--amber); border-radius: 10px; min-width: 70px; }
+.retnum b { font: 800 30px/1 var(--f-display); color: var(--amber); }
+.retnum span { font-size: 12px; text-align: center; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---- playbook maker ---- */
+.cp-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.cp-card { cursor: default; }
+.cp-card .row { margin-top: 8px; gap: 6px; }
+.cp-form { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; align-items: flex-end; }
+.cp-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.cp-form label.row { flex-direction: row; align-items: center; }
+.cp-wrap { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 12px; }
+.cp-field { width: 100%; display: block; background: linear-gradient(180deg, #2f7a3a, #276a31); border-radius: 10px; touch-action: manipulation; cursor: crosshair; user-select: none; }
+.cp-pick { cursor: pointer; }
+.cp-side label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; margin: 8px 0; }
+.cp-side label.row { flex-direction: row; align-items: center; }
+.cp-who { gap: 6px; flex-wrap: wrap; }
+@media (max-width: 760px) { .cp-wrap { grid-template-columns: 1fr; } }
+
 </style>
 <section id="menu" class="screen">
   <div class="menu-inner wrap">
@@ -1518,6 +1553,7 @@ function newGameState(L, hid, aid, opts = {}) {
     const b = { rookie: -6, pro: 0, allpro: 4, legend: 8 }[gs.diff] || 0;
     const c = gs.rt[1 - gs.userSide]; for (const k in c) c[k] += b;
   }
+  gs.timeouts = [3, 3]; gs.noHuddle = [false, false]; gs.tmw = {}; gs.lastRunoff = 0; gs.pens = [[0, 0], [0, 0]];
   gs.opening = chance(0.5) ? 0 : 1;
   kickoff(gs, gs.opening, true);
   return gs;
@@ -1594,21 +1630,26 @@ function fgProb(k, dist) {
 
 // time management + quarter transitions. returns true if game over
 function runClock(gs, sec) {
+  const before = gs.clock;
   gs.clock -= sec;
+  // two-minute warning: the clock stops at 2:00 of each half
+  if ((gs.quarter === 2 || gs.quarter === 4) && gs.qlen > 150 && before > 120 && gs.clock <= 120 && gs.tmw && !gs.tmw[gs.quarter]) {
+    gs.tmw[gs.quarter] = true; gs.clock = 120; gs.lastRunoff = 0; logp(gs, '— Two-minute warning —'); return false;
+  }
   if (gs.clock > 0) return false;
   gs.clock = 0;
   return endQuarter(gs);
 }
 function endQuarter(gs) {
   if (gs.quarter === 2) {
-    gs.quarter = 3; gs.clock = gs.qlen; logp(gs, '— Halftime —', true);
+    gs.quarter = 3; gs.clock = gs.qlen; gs.timeouts = [3, 3]; gs.lastRunoff = 0; logp(gs, '— Halftime —', true);
     kickoff(gs, 1 - gs.opening); return false;
   }
   if (gs.quarter < 4) { gs.quarter++; gs.clock = gs.qlen; logp(gs, `— End of Q${gs.quarter - 1} —`); return false; }
   // end of 4th or OT
   if (gs.score[0] !== gs.score[1]) { gs.over = true; return true; }
   if (gs.quarter >= 5 && !gs.playoff) { gs.over = true; logp(gs, 'Game ends in a TIE.', true); return true; }
-  gs.quarter++; gs.clock = Math.min(600, gs.qlen); gs.otPoss = 0;
+  gs.quarter++; gs.clock = Math.min(600, gs.qlen); gs.otPoss = 0; gs.timeouts = [2, 2]; gs.lastRunoff = 0;
   logp(gs, gs.quarter === 5 ? '— OVERTIME —' : '— Another OT period —', true);
   kickoff(gs, chance(0.5) ? 0 : 1);
   return false;
@@ -1664,9 +1705,11 @@ function _applyPlay(gs, res) {
     if (gs.down > 4) { logp(gs, 'Turnover on downs.'); setBall(gs, def, 100 - gs.yard); stop = true; }
   }
   // clock: running unless stopped; hurry-up late in halves
-  let t = res.elapsed;
-  if (!stop) t += hurry(gs, off) ? 8 : gs.runoff;
-  runClock(gs, t);
+  // time that runs between plays is remembered so a timeout or spike can save it
+  const runoff = stop ? 0 : (hurry(gs, off) || (gs.noHuddle && gs.noHuddle[off])) ? 8 : gs.runoff;
+  const q0 = gs.quarter;
+  runClock(gs, res.elapsed + runoff);
+  gs.lastRunoff = gs.quarter === q0 ? Math.min(runoff, gs.qlen - gs.clock) : 0;
 }
 function hurry(gs, side) {
   const late = (gs.quarter === 2 || gs.quarter >= 4) && gs.clock < 150;
@@ -3369,6 +3412,141 @@ LiveGame.prototype.choose = function (id) {
 };
 
 // ============================================================
+// Gridiron Dynasty - two-minute drill: timeouts, spike, no-huddle,
+// CPU clock management
+// ============================================================
+'use strict';
+
+function useTimeout(gs, side) {
+  if (!gs.timeouts || gs.timeouts[side] <= 0) return false;
+  gs.timeouts[side]--;
+  const saved = gs.lastRunoff || 0;
+  if (saved > 0) gs.clock = Math.min(gs.qlen, gs.clock + saved);
+  gs.lastRunoff = 0;
+  logp(gs, `Timeout ${teamAbbr(gs, side)} (${gs.timeouts[side]} left)${saved ? ` — saved ${Math.round(saved)}s` : ''}`);
+  return true;
+}
+function twoMinuteTime(gs) { return (gs.quarter === 2 || gs.quarter >= 4) && gs.clock <= 180; }
+
+// spike: stop the clock right away at the cost of a down
+LiveGame.prototype.spikeBall = function () {
+  const gs = this.gs, saved = Math.max(0, (gs.lastRunoff || 0) - 6);
+  gs.clock = Math.min(gs.qlen, gs.clock + saved); gs.lastRunoff = 0;
+  st(gs, gs.lu[gs.poss].QB[0], 'pa');
+  logp(gs, `${pshort(gs.lu[gs.poss].QB[0])} spikes the ball.`);
+  applyPlay(gs, { yards: 0, inc: true, elapsed: 1 });
+  this.result('Spiked', `Clock stopped at ${fmtClock(gs.clock)}`);
+};
+SPECIAL_PLAYS.push({ id: 'spike', name: 'Spike', type: 'special', desc: 'Stop the clock.' });
+const _specialClock = LiveGame.prototype.special;
+LiveGame.prototype.special = function (id) {
+  if (id === 'spike') return this.spikeBall();
+  return _specialClock.call(this, id);
+};
+
+// CPU uses timeouts late when it's behind (on defense to save time, on offense in the two-minute drill)
+const _nextClock = LiveGame.prototype.next;
+LiveGame.prototype.next = function () {
+  const gs = this.gs;
+  if (!gs.over && this.user >= 0 && (gs.lastRunoff || 0) > 10) {
+    const cpu = 1 - this.user, behind = gs.score[cpu] < gs.score[this.user] || (gs.quarter === 2 && gs.poss === cpu);
+    const late = (gs.quarter >= 4 && gs.clock < 150) || (gs.quarter === 2 && gs.clock < 60);
+    if (late && behind && gs.timeouts[cpu] > 0 && (gs.score[this.user] - gs.score[cpu] <= 16 || gs.quarter === 2)) {
+      if (useTimeout(gs, cpu) && this.h.toast) this.h.toast(`${this.teamOf(cpu).abbr} calls timeout. ${gs.timeouts[cpu]} left.`);
+    }
+  }
+  if (gs.tmw) for (const q of [2, 4]) if (gs.tmw[q] && !(this._tmwShown || {})[q]) { (this._tmwShown = this._tmwShown || {})[q] = true; this.h.toast && this.h.toast('Two-minute warning'); }
+  return _nextClock.call(this);
+};
+
+// ============================================================
+// Gridiron Dynasty - penalties: offsides, false start, holding (both
+// sides), defensive pass interference. Flags shown in the result banner.
+// ============================================================
+'use strict';
+
+const LP = LiveGame.prototype;
+const pensOn = lg => !(lg.L && lg.L.settings && lg.L.settings.penalties === false);
+
+// pre-snap: defense jumps offsides, CPU offense false starts (you control your own snap)
+const _snapPen = LP.snap;
+LP.snap = function () {
+  if (this.phase !== 'pre' || !pensOn(this) || !this.O) return _snapPen.call(this);
+  const r = Math.random();
+  if (r < 0.012) return this.preSnapFlag('D', 'Offsides', this.D.DL[randi(0, 3)]);
+  if (r < 0.022 && !this.userOnOffense()) return this.preSnapFlag('O', 'False start', this.O.OL[randi(0, 4)]);
+  return _snapPen.call(this);
+};
+LP.preSnapFlag = function (on, name, who) {
+  const gs = this.gs; sfx('whistle');
+  const pen = { on, yds: 5, name, who };
+  this.enforce(pen);
+  this.flagBanner(pen, true);
+};
+
+// during the play: decided when the whistle blows
+const _endPen = LP.endPlay;
+LP.endPlay = function (kind, msg) {
+  if (this.phase !== 'live' || !pensOn(this) || !this.O || this.play.int) return _endPen.call(this, kind, msg);
+  const pen = this.rollPenalty(kind);
+  if (!pen) return _endPen.call(this, kind, msg);
+  sfx('whistle');
+  this.enforce(pen);
+  this.flagBanner(pen, false, kind === 'td');
+};
+
+LP.rollPenalty = function (kind) {
+  const pl = this.play, c = this.carrier(), gain = c ? c.x - this.los : 0;
+  // defensive pass interference on a contested incompletion
+  if (kind === 'inc' && pl.target && !pl.throwAway && this.ball) {
+    const tx = this.ball.tx, ty = this.ball.ty;
+    const d = this.ents.filter(e => e.side === 'D').sort((a, b) => Math.hypot(a.x - tx, a.y - ty) - Math.hypot(b.x - tx, b.y - ty))[0];
+    if (d && Math.hypot(d.x - pl.target.x, d.y - pl.target.y) < 1.3 && tx - this.los > 3 && chance(0.2 - d.r.cov / 1000)) {
+      return { on: 'D', name: 'Pass interference', who: d, spot: Math.round(tx - this.los), auto: true };
+    }
+  }
+  // offensive holding: only when blocks were set, declined if the play already lost a lot
+  const blocked = this.ents.some(e => e.side === 'O' && e.eng) || this.t > 1.2;
+  if (blocked && chance(0.03) && gain > -8) {
+    const who = pick(this.O.OL);
+    return { on: 'O', yds: 10, name: 'Holding', who };
+  }
+  // defensive holding on pass plays, accepted when the play gained less than 5
+  if (this.passReady && chance(0.015) && (kind === 'inc' || gain < 5)) {
+    return { on: 'D', yds: 5, name: 'Defensive holding', who: pick(this.D.CB), auto: true };
+  }
+  return null;
+};
+
+// move the ball for a penalty and replay the down (or give a first down)
+LP.enforce = function (pen) {
+  const gs = this.gs, off = gs.poss, def = 1 - off;
+  let yds;
+  if (pen.on === 'O') {
+    yds = Math.min(pen.yds, Math.floor(gs.yard / 2) || 1);
+    gs.yard -= yds; gs.togo += yds;
+  } else {
+    yds = pen.spot != null ? Math.max(1, pen.spot) : pen.yds;
+    yds = Math.min(yds, pen.spot != null ? 99 - gs.yard : Math.max(1, Math.floor((100 - gs.yard) / 2)));
+    gs.yard = Math.min(99, gs.yard + yds);
+    if (pen.auto || gs.togo - yds <= 0) { gs.down = 1; gs.togo = Math.min(10, 100 - gs.yard); }
+    else gs.togo -= yds;
+  }
+  pen.applied = yds;
+  const side = pen.on === 'O' ? off : def;
+  gs.pens[side][0]++; gs.pens[side][1] += yds;
+  logp(gs, `FLAG: ${pen.name}, ${teamAbbr(gs, side)}${pen.who ? ' #' + pen.who.p.num : ''} — ${yds} yards${pen.auto && pen.on === 'D' ? ', automatic first down' : ''}.`);
+  if (this.phase === 'live') runClock(gs, Math.max(3, Math.min(this.t, 12)));
+  gs.lastRunoff = 0;
+};
+LP.flagBanner = function (pen, pre, calledBackTD) {
+  const gs = this.gs, side = pen.on === 'O' ? gs.poss : 1 - gs.poss;
+  const sub = `${this.teamOf(side).abbr}${pen.who ? ' #' + pen.who.p.num : ''} · ${pen.applied} yards${pen.on === 'D' && pen.auto ? ' · automatic first down' : pre ? ' · replay the down' : ' · repeat the down'}${calledBackTD ? ' · touchdown called back' : ''}`;
+  this.result(`FLAG: ${pen.name}`, sub);
+  if (this.banner) this.banner.flag = true;
+};
+
+// ============================================================
 // Gridiron Dynasty - broadcast camera renderer (v2 graphics)
 // Perspective view from behind the offense: downfield = up the screen,
 // the offense's right (+y) = screen right.
@@ -4525,7 +4703,7 @@ function setupGo() {
 }
 
 // ============================================================ HUB
-const TABS = [['home', 'Home'], ['lineup', 'Lineup'], ['roster', 'Roster'], ['depth', 'Depth Chart'], ['dev', 'Development'], ['cap', 'Contracts'], ['schedule', 'Schedule'], ['standings', 'Standings'], ['stats', 'Leaders'], ['trade', 'Trade'], ['fa', 'Free Agents'], ['scout', 'Scouting'], ['draft', 'Draft'], ['history', 'History'], ['settings', 'Settings']];
+const TABS = [['home', 'Home'], ['lineup', 'Lineup'], ['roster', 'Roster'], ['depth', 'Depth Chart'], ['dev', 'Development'], ['cap', 'Contracts'], ['schedule', 'Schedule'], ['standings', 'Standings'], ['stats', 'Leaders'], ['trade', 'Trade'], ['fa', 'Free Agents'], ['scout', 'Scouting'], ['draft', 'Draft'], ['history', 'History'], ['records', 'Records'], ['playbook', 'Playbook'], ['settings', 'Settings']];
 function renderHub() {
   show('hub');
   const L = LEAGUE, t = UT(), o = teamOvr(L, t);
@@ -4537,7 +4715,7 @@ function renderHub() {
   const dotTab = { home: ['recap', 'resign', 'fa', 'draft'].includes(L.phase), draft: L.phase === 'draft', fa: L.phase === 'fa' };
   $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${n}${dotTab[k] ? '<span class="dot"></span>' : ''}</button>`).join('');
   const P = $('#panel');
-  const fn = { home: viewHome, lineup: viewLineup, dev: viewDev, cap: viewCap, scout: viewScout, roster: viewRoster, depth: viewDepth, schedule: viewSchedule, standings: viewStandings, stats: viewStats, trade: viewTrade, fa: viewFA, draft: viewDraft, history: viewHistory, settings: viewSettings }[TAB];
+  const fn = { home: viewHome, lineup: viewLineup, dev: viewDev, cap: viewCap, scout: viewScout, roster: viewRoster, depth: viewDepth, schedule: viewSchedule, standings: viewStandings, stats: viewStats, trade: viewTrade, fa: viewFA, draft: viewDraft, history: viewHistory, records: viewRecords, playbook: viewPlaybook, settings: viewSettings }[TAB];
   P.innerHTML = fn();
   if (TAB === 'trade') tradeRefresh();
 }
@@ -4837,7 +5015,8 @@ function viewSettings() {
   return `<div class="card stack"><h2>Game settings</h2>
     <label>Difficulty <select data-act="set" data-key="diff">${[['rookie', 'Rookie'], ['pro', 'Pro'], ['allpro', 'All-Pro'], ['legend', 'Legend']].map(([k, n]) => `<option value="${k}" ${s.diff === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
     <label>Quarter length <select data-act="set" data-key="qlen">${[[120, '2 min'], [180, '3 min'], [240, '4 min'], [300, '5 min'], [480, '8 min']].map(([k, n]) => `<option value="${k}" ${+s.qlen === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-    <label class="row" style="gap:8px"><input type="checkbox" data-act="set" data-key="simDef" ${s.simDef ? 'checked' : ''}> <b>Offense only</b>: the CPU's drives are simulated, you only play offense</label></div>
+    <label class="row" style="gap:8px"><input type="checkbox" data-act="set" data-key="simDef" ${s.simDef ? 'checked' : ''}> <b>Offense only</b>: the CPU's drives are simulated, you only play offense</label>
+    <label class="row" style="gap:8px"><input type="checkbox" data-act="set" data-key="penalties" ${s.penalties !== false ? 'checked' : ''}> <b>Penalties</b>: offsides, false starts, holding and pass interference</label></div>
     <div class="card stack"><h2>Save &amp; backup</h2><div class="muted small">Franchise slot ${SLOT}. The game saves automatically after every action.</div>
     <div class="row"><button class="btn" data-act="save-now">Save now</button><button class="btn" data-act="export">Export save</button><button class="btn" data-act="import">Import save</button></div></div>
     <div class="card stack"><h2>Danger zone</h2><div class="row"><button class="btn danger" data-act="del-current">Delete this franchise</button></div></div>`;
@@ -4968,6 +5147,8 @@ document.addEventListener('click', e => {
     case 'toggle-simdef': { LEAGUE.settings.simDef = !LEAGUE.settings.simDef; save(); $('#simDefBtn').textContent = 'Offense only: ' + (LEAGUE.settings.simDef ? 'On' : 'Off'); toast(LEAGUE.settings.simDef ? 'Offense only ON: the CPU\'s drives will be simulated.' : 'Offense only OFF: you play defense too.'); break; }
     case 'toggle-cam': if (GAME) { const order = ['gl', '3d', 'top'], cur = GAME.live.camMode; const m = order[(order.indexOf(cur) + 1) % order.length]; GAME.live.camMode = m; LEAGUE.settings.cam2 = m; save(); toast({ gl: 'Camera: 3D', '3d': 'Camera: Classic broadcast', top: 'Camera: Top-down' }[m]); } break;
     case 'toggle-sound': window.__mute = !window.__mute; try { localStorage.setItem('gd_mute', window.__mute ? '1' : '0'); } catch (e) { } toast(window.__mute ? 'Sound off' : 'Sound on'); break;
+    case 'pc-timeout': if (GAME) { const lg = GAME.live; if (useTimeout(lg.gs, lg.user)) { toast(`Timeout. ${lg.gs.timeouts[lg.user]} left.`); lg.h.update(); showPlayCall(lg.userOnOffense() ? 'off' : 'def'); } } break;
+    case 'pc-nohuddle': if (GAME) { const lg = GAME.live; lg.gs.noHuddle[lg.user] = !lg.gs.noHuddle[lg.user]; toast(lg.gs.noHuddle[lg.user] ? 'No-huddle ON: less time between plays.' : 'No-huddle OFF.'); showPlayCall('off'); } break;
     case 'call-play': if (GAME) { $('#playcall').hidden = true; GAME.live.choose(el.dataset.id); } break;
     case 'call-auto': if (GAME) { $('#playcall').hidden = true; const lg = GAME.live; lg.choose(lg.userOnOffense() ? autoOffCall(lg.gs) : cpuDefCall(lg.gs).id); } break;
     case 'offense-only-now': if (GAME) { LEAGUE.settings.simDef = true; save(); $('#simDefBtn').textContent = 'Offense only: On'; $('#playcall').hidden = true; toast('Offense only ON. Turn it off any time in the pause menu.'); GAME.live.next(); } break;
@@ -5071,7 +5252,7 @@ function updateHUD() {
   const q = gs.quarter <= 4 ? 'Q' + gs.quarter : 'OT';
   const lg = GAME.live;
   const clock = lg.phase === 'live' ? Math.max(0, gs.clock - lg.t) : gs.clock;
-  const sbt = s => `<div class="sb-team ${gs.poss === s ? 'has' : ''}" style="--c1:${tm(s).c1}"><span class="poss"></span><span class="emb xs">${emblemSVG(tm(s))}</span><span class="ab">${tm(s).abbr}</span><span class="sc">${gs.score[s]}</span></div>`;
+  const sbt = s => `<div class="sb-team ${gs.poss === s ? 'has' : ''}" style="--c1:${tm(s).c1}"><span class="poss"></span><span class="emb xs">${emblemSVG(tm(s))}</span><span class="ab">${tm(s).abbr}</span><span class="sc">${gs.score[s]}</span><span class="tos">${[0, 1, 2].map(i => `<i class="${i < (gs.timeouts ? gs.timeouts[s] : 3) ? 'on' : ''}"></i>`).join('')}</span></div>`;
   $('#scorebug').innerHTML = `${sbt(1)}<div class="sb-mid"><div class="clk">${q} ${fmtClock(clock)}</div><div class="dd">${downStr(gs)} · ${yardStr(gs)}</div></div>${sbt(0)}`;
   // hint + action button label
   const ph = lg.phase; let hint = '', act = 'Action';
@@ -5102,7 +5283,7 @@ function updateHUD() {
 let _hudT = 0; function hudTick() { const n = performance.now(); if (n - _hudT > 150) { _hudT = n; updateHUD(); } }
 
 function showBanner(b) {
-  const el = $('#banner'); el.className = 'banner' + (b.big ? ' big' : ''); el.innerHTML = `<div class="bt">${esc(b.title)}</div>${b.sub ? `<div class="bs">${esc(b.sub)}</div>` : ''}`;
+  const el = $('#banner'); el.className = 'banner' + (b.big ? ' big' : '') + (/^FLAG/.test(b.title) ? ' flag' : ''); el.innerHTML = `<div class="bt">${esc(b.title)}</div>${b.sub ? `<div class="bs">${esc(b.sub)}</div>` : ''}`;
   el.hidden = false; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
   clearTimeout(showBanner._t); showBanner._t = setTimeout(() => el.hidden = true, b.big ? 2300 : 1500);
 }
@@ -5147,6 +5328,14 @@ function playSVG(play, kind) {
 }
 
 let PC_TAB = 'All';
+function clockBar(lg, mode) {
+  const gs = lg.gs, u = lg.user; if (u < 0 || !gs.timeouts) return '';
+  const left = gs.timeouts[u], saves = (gs.lastRunoff || 0) > 0;
+  return `<div class="pc-clock row"><span class="small">Timeouts <b class="tos big">${[0, 1, 2].map(i => `<i class="${i < left ? 'on' : ''}"></i>`).join('')}</b></span>
+    <button class="btn sm ${saves && left ? 'primary' : ''}" data-act="pc-timeout" ${left && saves ? '' : 'disabled'} title="Stops the clock and gets back the time that ran since the last play">Timeout${saves ? ` (save ${Math.round(gs.lastRunoff)}s)` : ''}</button>
+    ${mode === 'off' ? `<button class="btn sm ${gs.noHuddle[u] ? 'primary' : ''}" data-act="pc-nohuddle">No-huddle: ${gs.noHuddle[u] ? 'ON' : 'OFF'}</button>` : ''}
+    ${twoMinuteTime(gs) ? '<span class="pill red">Two-minute drill</span>' : ''}</div>`;
+}
 function showPlayCall(mode, audible) {
   const lg = GAME.live, gs = lg.gs, L = LEAGUE;
   const el = $('#playcall');
@@ -5162,14 +5351,16 @@ function showPlayCall(mode, audible) {
       if (gs.down === 4 && fp > 0.02) specials.push(`<button class="play special" data-act="call-play" data-id="fakefg"><span class="tag">Fake</span><span class="pn">Fake Field Goal</span><span class="pd">The holder pops up and throws.</span></button>`);
     }
     if (gs.score[gs.poss] > gs.score[1 - gs.poss] && gs.quarter >= 4 && gs.clock < 150) specials.push(`<button class="play special" data-act="call-play" data-id="kneel"><span class="tag">Clock</span><span class="pn">QB Kneel</span><span class="pd">Run out the clock.</span></button>`);
-    const cats = ['Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
+    if (twoMinuteTime(gs) && (gs.lastRunoff || 0) > 0 && gs.down < 4) specials.unshift(`<button class="play special" data-act="call-play" data-id="spike"><span class="tag">Clock</span><span class="pn">Spike</span><span class="pd">Stop the clock now. Costs a down.</span></button>`);
+    const cats = ['My Plays', 'Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
     cards = specials.join('') + cats.map(c => { const ps = OFF_PLAYS.filter(p => (p.cat || 'Pass') === c); if (!ps.length) return ''; return `<div class="pc-sec" data-cat="${c}" ${PC_TAB !== 'All' && PC_TAB !== c ? 'hidden' : ''}><h3 class="pc-cat">${c === 'Trick' ? 'Trick plays' : c === 'RPO' ? 'RPOs' : c} <span class="muted small">${ps.length}</span></h3>` + ps.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'off')}<span class="tag">${c}</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('') + '</div>'; }).join('');
   } else {
     cards = DEF_PLAYS.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'def')}<span class="tag">Defense</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('');
   }
   el.innerHTML = `<div class="pc-inner wrap"><div class="pc-head"><h2>${audible ? 'Audible' : mode === 'off' ? 'Call your play' : 'Call your defense'}</h2><span class="pill amber">${sit}</span><span class="grow"></span>
     <button class="btn sm" data-act="call-auto">Ask coach</button><button class="btn sm" data-act="sim-drive">Sim this drive</button>${mode === 'def' ? '<button class="btn sm primary" data-act="offense-only-now">Offense only from now on</button>' : ''}<button class="btn sm ghost" data-act="sim-game-rest">Sim rest of game</button></div>
-    ${mode === 'off' ? `<div class="pc-tabs">${['All', 'Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'].map(t => `<button class="tab ${PC_TAB === t ? 'on' : ''}" data-act="pc-tab" data-cat="${t}">${t === 'Trick' ? 'Trick plays' : t}</button>`).join('')}</div>` : ''}
+    ${clockBar(lg, mode)}
+    ${mode === 'off' ? `<div class="pc-tabs">${['All', ...(OFF_PLAYS.some(p => p.custom) ? ['My Plays'] : []), 'Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'].map(t => `<button class="tab ${PC_TAB === t ? 'on' : ''}" data-act="pc-tab" data-cat="${t}">${t === 'Trick' ? 'Trick plays' : t}</button>`).join('')}</div>` : ''}
     <div class="plays">${cards}</div></div>`;
   el.hidden = false;
 }
@@ -5589,5 +5780,306 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const el = e.target.closest('[data-act=sc-filter]'); if (!el) return; SC_FILTER = el.value; renderHub();
 });
+
+// ============================================================
+// Gridiron Dynasty - records, All-Pro teams, Hall of Fame,
+// retired numbers
+// ============================================================
+'use strict';
+
+const REC_STATS = [['py', 'Passing yards'], ['ptd', 'Passing TD'], ['ry', 'Rushing yards'], ['rtd', 'Rushing TD'], ['rec', 'Receptions'], ['rcy', 'Receiving yards'], ['rctd', 'Receiving TD'], ['sk', 'Sacks'], ['dint', 'Interceptions'], ['tk', 'Tackles'], ['fgm', 'Field goals']];
+
+function seasonScore(p) {
+  const s = p.st || {};
+  if (p.pos === 'QB') return (s.py || 0) / 25 + (s.ptd || 0) * 4 - (s.pint || 0) * 2 + (s.ry || 0) / 10 + (s.rtd || 0) * 6;
+  if (['RB', 'WR', 'TE'].includes(p.pos)) return ((s.ry || 0) + (s.rcy || 0)) / 10 + ((s.rtd || 0) + (s.rctd || 0)) * 6;
+  if (p.pos === 'OL') return p.ovr * 2 + (s.gp || 0);
+  if (p.pos === 'K' || p.pos === 'P') return p.ovr * 2 + (s.fgm || 0);
+  return (s.tk || 0) + (s.sk || 0) * 5 + (s.dint || 0) * 6 + (s.pd || 0) * 1.5 + p.ovr * 0.3;
+}
+
+// All-Pro team added to each season's awards
+const _computeAwardsR = computeAwards;
+computeAwards = function (L) {
+  _computeAwardsR(L);
+  const aw = L.awards[0]; if (!aw) return;
+  const all = Object.values(L.players).filter(p => p.tid != null && p.tid >= 0 && p.st && p.st.gp);
+  const team = [];
+  for (const pos of POSITIONS) {
+    const n = pos === 'CB' ? 2 : STARTERS[pos];
+    all.filter(p => p.pos === pos).sort((a, b) => seasonScore(b) - seasonScore(a)).slice(0, n).forEach(p => {
+      team.push({ id: p.id, name: pname(p), pos, tid: p.tid }); p.allPros = (p.allPros || 0) + 1;
+    });
+  }
+  aw.allpro = team;
+  for (const k of ['mvp', 'opoy', 'dpoy', 'roy']) if (aw[k]) { const p = L.players[aw[k].id]; if (p) { p.awards = p.awards || []; p.awards.push(k.toUpperCase() + ' ' + aw.season); } }
+};
+
+// archive retirees so records and the Hall of Fame keep them
+function careerTotals(career) {
+  const t = {}; for (const c of career || []) for (const k in c) if (typeof c[k] === 'number' && k !== 'season') t[k] = (t[k] || 0) + c[k];
+  return t;
+}
+function hofScore(p, tot) {
+  const aw = (p.awards || []).join(' ');
+  const mvps = (aw.match(/MVP/g) || []).length, poys = (aw.match(/OPOY|DPOY/g) || []).length;
+  return (tot.py || 0) / 500 + (tot.ptd || 0) * 0.8 - (tot.pint || 0) * 0.5 + (tot.ry || 0) / 100 + (tot.rtd || 0) * 1.5 + (tot.rcy || 0) / 100 + (tot.rctd || 0) * 1.5
+    + (tot.sk || 0) * 2.5 + (tot.dint || 0) * 4 + (tot.tk || 0) * 0.06 + (tot.fgm || 0) * 0.2 + mvps * 30 + poys * 18 + (p.allPros || 0) * 12;
+}
+const _beginOffR = beginOffseason;
+beginOffseason = function (L) {
+  const before = new Map(Object.values(L.players).map(p => [p.id, p]));
+  _beginOffR(L);
+  L.retired = L.retired || [];
+  for (const [id, p] of before) {
+    if (L.players[id] || p.tid === -1) continue;
+    const tot = careerTotals(p.career), seasons = (p.career || []).length;
+    if (!seasons) continue;
+    const score = hofScore(p, tot), hof = seasons >= 5 && score >= 240 && ((p.allPros || 0) >= 2 || (p.awards || []).length > 0 || score >= 320);
+    const teams = [...new Set((p.career || []).map(c => c.tm).filter(t => t && t !== 'FA'))];
+    L.retired.push({ id, name: pname(p), pos: p.pos, num: p.num, teams, seasons, tot, career: p.career, awards: p.awards || [], allPros: p.allPros || 0, hof, year: L.season, score: Math.round(score) });
+    if (hof) addNews(L, `🏛 Hall of Fame: ${p.pos} ${pname(p)} is inducted in the Class of ${L.season + 1}.`);
+  }
+  // keep the archive light: all Hall of Famers plus the 300 best careers
+  L.retired.sort((a, b) => (b.hof - a.hof) || b.score - a.score);
+  if (L.retired.length > 340) L.retired = L.retired.filter((r, i) => r.hof || i < 300);
+};
+
+// ---------- Records tab ----------
+function viewRecords() {
+  const L = LEAGUE, u = UT();
+  const active = Object.values(L.players).filter(p => p.tid != null && p.tid >= 0);
+  const seasonRows = [];
+  for (const p of active) {
+    for (const c of p.career || []) seasonRows.push({ name: pname(p), pos: p.pos, season: c.season, tm: c.tm, s: c });
+    if (p.st && p.st.gp) seasonRows.push({ name: pname(p), pos: p.pos, season: L.season, tm: L.teams[p.tid].abbr, s: p.st, live: true });
+  }
+  for (const r of L.retired || []) for (const c of r.career || []) seasonRows.push({ name: r.name, pos: r.pos, season: c.season, tm: c.tm, s: c });
+  const careers = active.map(p => ({ name: pname(p), pos: p.pos, tot: (() => { const t = careerTotals(p.career); for (const k in p.st || {}) t[k] = (t[k] || 0) + p.st[k]; return t; })(), active: true }))
+    .concat((L.retired || []).map(r => ({ name: r.name, pos: r.pos, tot: r.tot, active: false })));
+  const board = (rows, key, val, label) => {
+    const top = rows.filter(r => val(r) > 0).sort((a, b) => val(b) - val(a)).slice(0, 5);
+    return `<div class="card"><h2>${label}</h2>${top.length ? `<div class="tbl-wrap"><table class="t"><tbody>${top.map((r, i) => `<tr><td class="num muted">${i + 1}</td><td>${esc(r.name)} <span class="muted small">${r.pos}${r.season ? ' · ' + r.season + ' ' + r.tm : r.active ? '' : ' · retired'}${r.live ? ' · in progress' : ''}</span></td><td class="r num"><b>${val(r)}</b></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted small">No stats yet.</p>'}</div>`;
+  };
+  const tab = REC_TAB;
+  const body = tab === 'season' ? REC_STATS.map(([k, n]) => board(seasonRows, k, r => r.s[k] || 0, n)).join('')
+    : tab === 'career' ? REC_STATS.map(([k, n]) => board(careers, k, r => r.tot[k] || 0, n)).join('') : '';
+  const hof = (L.retired || []).filter(r => r.hof);
+  const retiredNums = (L.retiredNums || {})[u.abbr] || [];
+  const hofHtml = `<div class="card"><h2>Hall of Fame</h2>${hof.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Class</th><th>Player</th><th>Teams</th><th class="r">Seasons</th><th>Honors</th><th></th></tr></thead><tbody>${hof.map(r => {
+      const mine = r.teams.includes(u.abbr), done = retiredNums.some(x => x.num === r.num);
+      return `<tr><td>${r.year + 1}</td><td>${r.pos} <b>${esc(r.name)}</b> <span class="muted small">#${r.num}</span></td><td class="small">${r.teams.join(', ')}</td><td class="r">${r.seasons}</td><td class="small">${[...r.awards, r.allPros ? r.allPros + '× All-Pro' : ''].filter(Boolean).join(' · ') || '—'}</td>
+        <td>${mine ? (done ? '<span class="pill amber">Number retired</span>' : `<button class="btn sm" data-act="rec-retire" data-id="${r.id}">Retire #${r.num}</button>`) : ''}</td></tr>`; }).join('')}</tbody></table></div>`
+    : '<p class="muted small">Nobody yet. Players are inducted when they retire after a great career (5+ seasons of big numbers plus All-Pro teams or awards).</p>'}</div>`;
+  const ap = (L.awards || []).find(a => a.allpro);
+  const apHtml = ap ? `<div class="card"><h2>${ap.season} All-Pro team</h2><div class="ap-grid">${ap.allpro.map(x => `<div class="ap"><span class="pos-chip">${x.pos}</span> ${esc(x.name)} <span class="muted small">${L.teams[x.tid] ? L.teams[x.tid].abbr : ''}</span></div>`).join('')}</div></div>` : '';
+  const numsHtml = retiredNums.length ? `<div class="card"><h2>${esc(u.name)} retired numbers</h2><div class="row">${retiredNums.map(x => `<div class="retnum"><b>${x.num}</b><span>${esc(x.name)}</span></div>`).join('')}</div></div>` : '';
+  return `<div class="card row"><h2 class="grow" style="margin:0">Records</h2><div class="seg">${[['season', 'Single season'], ['career', 'Career'], ['hof', 'Hall of Fame']].map(([k, n]) => `<button class="btn sm ${tab === k ? 'primary' : ''}" data-act="rec-tab" data-tab="${k}">${n}</button>`).join('')}</div></div>
+    <p class="muted small">Records count games played in this league. They start from your first season.</p>
+    ${tab === 'hof' ? numsHtml + hofHtml + apHtml : `<div class="cols">${body}</div>`}`;
+}
+let REC_TAB = 'season';
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el || !LEAGUE) return;
+  if (el.dataset.act === 'rec-tab') { REC_TAB = el.dataset.tab; renderHub(); }
+  if (el.dataset.act === 'rec-retire') {
+    const L = LEAGUE, r = (L.retired || []).find(x => x.id === +el.dataset.id); if (!r) return;
+    L.retiredNums = L.retiredNums || {}; const abbr = UT().abbr; (L.retiredNums[abbr] = L.retiredNums[abbr] || []).push({ num: r.num, name: r.name });
+    addNews(L, `The ${UT().name} retire #${r.num} in honor of ${r.name}.`); save(); renderHub(); toast(`#${r.num} retired.`);
+  }
+});
+
+// ============================================================
+// Gridiron Dynasty - playbook maker. Design your own plays: pick a
+// formation, tap a player, tap the field to draw his route. Saved plays
+// show up in the play-call screen under "My Plays".
+// ============================================================
+'use strict';
+
+const CP_KEY = 'gd_custom_plays';
+const CP_SKILL = ['WR1', 'WR2', 'WR3', 'TE', 'RB'];
+const CP_TYPES = [['pass', 'Pass'], ['run', 'HB Run'], ['qbrun', 'QB Run']];
+const CP_FORM_NAMES = { gun: 'Shotgun', single: 'Under center', trips: 'Trips', pistol: 'Pistol', empty: 'Empty', bunch: 'Bunch', iform: 'I-Form', tight: 'Tight' };
+
+// custom routes are objects: { pts: [[dx, dy] offsets from the player's start], stop }
+const _routePtsCP = LiveGame.prototype.routePts;
+LiveGame.prototype.routePts = function (name, sx, sy, by) {
+  if (name && typeof name === 'object') {
+    const n = name.pts.length;
+    return name.pts.map(([dx, dy], i) => [sx + dx, clamp(sy + dy, 1, FIELD_W - 1), i === n - 1 && name.stop ? 's' : undefined]);
+  }
+  return _routePtsCP.call(this, name, sx, sy, by);
+};
+
+// the CPU never calls your custom plays
+const _cpuOffCallCP = cpuOffCall;
+cpuOffCall = function (gs) {
+  for (let i = 0; i < 6; i++) { const p = _cpuOffCallCP(gs); if (!p || p.cat !== 'My Plays') return p; }
+  return OFF_PLAYS.find(p => p.id === 'curlflat');
+};
+
+function cpLoad() { try { return JSON.parse(localStorage.getItem(CP_KEY) || '[]') || []; } catch (e) { return []; } }
+function cpStore(list) { try { localStorage.setItem(CP_KEY, JSON.stringify(list)); } catch (e) { toast('Could not save (storage blocked).'); } }
+const stepsOf = pts => pts.map(([x, y], i) => i ? [x - pts[i - 1][0], y - pts[i - 1][1]] : [x, y]);
+
+// turn a saved design into a real play the engine can run
+function cpCompile(d) {
+  const forms = FORMS[d.form] ? d.form : 'gun';
+  const p = { id: d.id, name: d.name || 'My Play', cat: 'My Plays', type: d.type, form: forms, custom: true, routes: {}, desc: '' };
+  const draw = d.draw || {};
+  if (d.type === 'pass') {
+    for (const k of CP_SKILL) {
+      const a = d.assign[k] || 'block';
+      if (a === 'custom') p.routes[k] = draw[k] && draw[k].length ? { pts: draw[k], stop: !!(d.stop || {})[k] } : 'block';
+      else p.routes[k] = a;
+    }
+    if (d.pa) p.pa = true;
+    const n = CP_SKILL.filter(k => p.routes[k] !== 'block').length;
+    p.desc = `${d.pa ? 'Play-action. ' : ''}${n} receiver${n === 1 ? '' : 's'} out${CP_SKILL.some(k => typeof p.routes[k] === 'object') ? ', hand-drawn routes' : ''}.`;
+  } else if (d.type === 'run') {
+    p.path = draw.RB && draw.RB.length ? stepsOf(draw.RB) : [[1.5, 0], [4, 1.2], [10, 1.6]];
+    p.desc = 'Your custom run design.';
+  } else {
+    p.type = 'qbrun';
+    p.qbPath = draw.QB && draw.QB.length ? stepsOf(draw.QB) : [[1.2, 0], [5, 0]];
+    if (draw.RB && draw.RB.length) p.path = stepsOf(draw.RB);
+    for (const k of ['WR1', 'WR2', 'WR3', 'TE']) { const a = d.assign[k]; if (a === 'custom' && draw[k] && draw[k].length) p.routes[k] = { pts: draw[k], stop: !!(d.stop || {})[k] }; else if (a && a !== 'block' && a !== 'custom') p.routes[k] = a; }
+    p.desc = 'Designed QB run.';
+  }
+  return p;
+}
+function cpInstall() {
+  for (let i = OFF_PLAYS.length - 1; i >= 0; i--) if (OFF_PLAYS[i].custom) OFF_PLAYS.splice(i, 1);
+  for (const d of cpLoad()) { try { OFF_PLAYS.push(cpCompile(d)); } catch (e) { /* skip a broken design */ } }
+}
+cpInstall();
+
+// ---------- playbook tab ----------
+let CP_EDIT = null; // the design being edited
+const CP_SEL = { who: 'WR1' };
+function cpNew() {
+  return { id: 'cp_' + Date.now().toString(36), name: 'New play', type: 'pass', form: 'gun', pa: false,
+    assign: { WR1: 'go', WR2: 'custom', WR3: 'slant', TE: 'block', RB: 'block' }, draw: {}, stop: {} };
+}
+function viewPlaybook() {
+  if (CP_EDIT) return cpEditor();
+  const list = cpLoad();
+  return `<div class="card row"><div class="grow"><h2 style="margin:0">My Playbook</h2><div class="muted small">Draw your own plays. They show up in the play-call screen under <b>My Plays</b>.</div></div>
+    <button class="btn primary" data-act="cp-new">+ New play</button></div>
+    ${list.length ? `<div class="cp-list">${list.map(d => { const p = cpCompile(d); return `<div class="play cp-card">${playSVG(p, 'off')}<span class="tag">${CP_TYPES.find(t => t[0] === d.type)[1]} · ${CP_FORM_NAMES[d.form] || d.form}</span><span class="pn">${esc(p.name)}</span><span class="pd">${esc(p.desc)}</span>
+      <div class="row"><button class="btn sm" data-act="cp-edit" data-id="${d.id}">Edit</button><button class="btn sm" data-act="cp-copy" data-id="${d.id}">Copy</button><button class="btn sm ghost" data-act="cp-del" data-id="${d.id}">Delete</button></div></div>`; }).join('')}</div>`
+    : `<div class="card"><p>No custom plays yet. Hit <b>New play</b>, pick a formation, then tap a player and tap the field to draw his route.</p></div>`}`;
+}
+
+// field drawing: offense goes up; svg 100 wide, LOS at y=52
+const CPY = dx => 52 - dx * 1.6, CPX = y => (y / FIELD_W) * 100;
+function cpWho(d) { return d.type === 'run' ? ['RB'] : d.type === 'qbrun' ? ['QB', 'RB', 'WR1', 'WR2', 'WR3', 'TE'] : CP_SKILL; }
+function cpStart(d, k) { const F = FORMS[d.form] || FORMS.gun; return [F[k][0], MID_Y + F[k][1]]; }
+function cpEditor() {
+  const d = CP_EDIT, F = FORMS[d.form] || FORMS.gun, who = cpWho(d);
+  if (!who.includes(CP_SEL.who)) CP_SEL.who = who[0];
+  const col = { WR1: RCOL[0], WR2: RCOL[1], WR3: RCOL[2], TE: RCOL[3], RB: RCOL[4], QB: '#ffb81c' };
+  const p = cpCompile(d);
+  let s = `<svg id="cpField" viewBox="0 0 100 74" class="cp-field">`;
+  for (let yd = -5; yd <= 30; yd += 5) s += `<line x1="0" x2="100" y1="${CPY(yd)}" y2="${CPY(yd)}" stroke="rgba(255,255,255,${yd === 0 ? 0 : .18})" stroke-width=".35"/>${yd > 0 ? `<text x="1" y="${CPY(yd) - .6}" font-size="2.4" fill="rgba(255,255,255,.5)">+${yd}</text>` : ''}`;
+  s += `<line x1="0" x2="100" y1="${CPY(0)}" y2="${CPY(0)}" stroke="rgba(120,180,255,.9)" stroke-width=".6"/>`;
+  for (const hy of [HASH_L, HASH_R]) for (let yd = -10; yd <= 30; yd++) s += `<line x1="${CPX(hy) - .6}" x2="${CPX(hy) + .6}" y1="${CPY(yd)}" y2="${CPY(yd)}" stroke="rgba(255,255,255,.3)" stroke-width=".25"/>`;
+  for (const dy of OL_DY) s += `<circle cx="${CPX(MID_Y + dy)}" cy="${CPY(-0.8)}" r="1.5" fill="#ccc"/>`;
+  const line = (k, pts, c, dash) => `<polyline fill="none" stroke="${c}" stroke-width="${k === CP_SEL.who ? 1.1 : .7}" ${dash ? 'stroke-dasharray="2 1.2"' : ''} stroke-linejoin="round" points="${pts.map(([a, b]) => `${CPX(clamp(b, 0, FIELD_W)).toFixed(1)},${clamp(CPY(a), 0, 74).toFixed(1)}`).join(' ')}"/>`;
+  const all = ['QB', ...CP_SKILL];
+  for (const k of all) {
+    const [sx, sy] = cpStart(d, k);
+    let pts = null, dash = false;
+    if (k === 'QB') { if (p.qbPath) { pts = LiveGame.prototype.routePts.call(null, { pts: cpCum(p.qbPath) }, sx, sy, MID_Y); dash = true; } }
+    else if (p.routes[k] && p.routes[k] !== 'block') pts = LiveGame.prototype.routePts.call(null, p.routes[k], sx, sy, MID_Y);
+    else if (k === 'RB' && p.path) pts = LiveGame.prototype.routePts.call(null, { pts: cpCum(p.path) }, sx, sy, MID_Y);
+    if (pts) {
+      s += line(k, [[sx, sy], ...pts], col[k], dash);
+      const last = pts[pts.length - 1];
+      if (last) s += (last[2] === 's' ? `<rect x="${CPX(last[1]) - 1}" y="${CPY(last[0]) - 1}" width="2" height="2" fill="${col[k]}"/>` : `<circle cx="${CPX(last[1])}" cy="${CPY(last[0])}" r=".8" fill="${col[k]}"/>`);
+    } else if (k !== 'QB') s += `<line x1="${CPX(sy) - 1.4}" x2="${CPX(sy) + 1.4}" y1="${CPY(sx) - 2.4}" y2="${CPY(sx) - 2.4}" stroke="#bbb" stroke-width=".6"/>`;
+    const on = k === CP_SEL.who, can = who.includes(k);
+    s += `<g class="${can ? 'cp-pick' : ''}" data-who="${k}"><circle cx="${CPX(sy)}" cy="${CPY(sx)}" r="${on ? 2.6 : 2}" fill="${col[k]}" stroke="${on ? '#fff' : '#111'}" stroke-width="${on ? .7 : .3}" opacity="${can ? 1 : .55}"/><text x="${CPX(sy)}" y="${CPY(sx) + 4.6}" font-size="2.3" text-anchor="middle" fill="#fff" font-weight="700">${k}</text></g>`;
+  }
+  s += `</svg>`;
+  const sel = CP_SEL.who, a = sel === 'QB' ? 'custom' : (d.assign[sel] || (d.type === 'pass' ? 'block' : 'custom'));
+  const presets = d.type === 'pass' || (d.type === 'qbrun' && sel !== 'QB' && sel !== 'RB') ? `<label>Route <select data-cp="assign">${[['custom', '✏️ Draw my own'], ['block', 'Block'], ...Object.keys(ROUTES).map(r => [r, r[0].toUpperCase() + r.slice(1)])].map(([v, n]) => `<option value="${v}" ${a === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>` : '';
+  const drawn = (d.draw[sel] || []).length;
+  return `<div class="card"><div class="row"><h2 class="grow" style="margin:0">Playbook maker</h2><button class="btn sm ghost" data-act="cp-cancel">Cancel</button><button class="btn sm primary" data-act="cp-save">Save play</button></div>
+    <div class="cp-form">
+      <label>Name <input data-cp="name" maxlength="28" value="${esc(d.name)}"></label>
+      <label>Type <select data-cp="type">${CP_TYPES.map(([v, n]) => `<option value="${v}" ${d.type === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      <label>Formation <select data-cp="form">${Object.keys(FORMS).map(f => `<option value="${f}" ${d.form === f ? 'selected' : ''}>${CP_FORM_NAMES[f] || f}</option>`).join('')}</select></label>
+      ${d.type === 'pass' ? `<label class="row" style="gap:6px"><input type="checkbox" data-cp="pa" ${d.pa ? 'checked' : ''}> Play-action fake</label>` : ''}
+    </div></div>
+    <div class="cp-wrap"><div class="card cp-board">${s}<div class="muted small" style="margin-top:6px">${d.type === 'run' ? 'Tap the field to draw the running back\'s path.' : d.type === 'qbrun' ? 'Pick QB to draw his run. RB and receivers can lead block or run decoy routes.' : 'Tap a player, then tap the field to add route points. Each tap adds a cut.'}</div></div>
+    <div class="card cp-side"><h2>${sel}${sel !== 'QB' ? ' · ' + esc(pname(cpPlayerFor(sel)) || '') : ''}</h2>
+      <div class="row cp-who">${cpWho(d).map(k => `<button class="btn sm ${k === sel ? 'primary' : ''}" data-act="cp-who" data-who="${k}">${k}</button>`).join('')}</div>
+      ${presets}
+      ${a === 'custom' ? `<p class="small">${drawn ? `${drawn} point${drawn === 1 ? '' : 's'} drawn.` : 'Tap the field to start drawing.'}</p>
+        <div class="row"><button class="btn sm" data-act="cp-undo" ${drawn ? '' : 'disabled'}>Undo point</button><button class="btn sm ghost" data-act="cp-clear" ${drawn ? '' : 'disabled'}>Clear</button></div>
+        ${d.type !== 'run' && sel !== 'QB' && sel !== 'RB' || (d.type === 'pass' && sel === 'RB') ? `<label class="row" style="gap:6px;margin-top:8px"><input type="checkbox" data-cp="stop" ${(d.stop || {})[sel] ? 'checked' : ''}> Sit down at the end (hook / curl)</label>` : ''}` : ''}
+      <p class="muted small" style="margin-top:12px">Tips: a sharp cut works best 5+ yards apart. Routes over 40 yards get cut off. The CPU won't use your plays — they're yours.</p>
+    </div></div>`;
+}
+const cpCum = steps => { let x = 0, y = 0; return steps.map(([a, b]) => [x += a, y += b]); };
+function cpPlayerFor(k) {
+  try { const lu = lineup(LEAGUE, UT(), 0); const m = { WR1: lu.WR[0], WR2: lu.WR[1], WR3: lu.WR[2], TE: lu.TE[0], RB: lu.RB[0], QB: lu.QB[0] }; return m[k] || { first: '', last: '' }; } catch (e) { return { first: '', last: '' }; }
+}
+function cpRender() { if (typeof renderHub === 'function' && LEAGUE) { const sy = window.scrollY; renderHub(); window.scrollTo(0, sy); } }
+function cpTap(ev, svg) {
+  const d = CP_EDIT, k = CP_SEL.who; if (!d || !cpWho(d).includes(k)) return;
+  const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+  const m = svg.getScreenCTM(); if (!m) return;
+  const q = pt.matrixTransform(m.inverse());
+  const dx = (52 - q.y) / 1.6, y = clamp(q.x / 100 * FIELD_W, 1, FIELD_W - 1);
+  const [sx, sy] = cpStart(d, k);
+  const arr = d.draw[k] = d.draw[k] || [];
+  if (arr.length >= 8) { toast('Max 8 points per route.'); return; }
+  const prev = arr.length ? arr[arr.length - 1] : [0, 0];
+  const o = [Math.round(clamp(dx - sx, -12, 45) * 2) / 2, Math.round((y - sy) * 2) / 2];
+  if (Math.hypot(o[0] - prev[0], o[1] - prev[1]) < 1) return;
+  arr.push(o);
+  if (k !== 'QB') d.assign[k] = 'custom';
+  cpRender();
+}
+document.addEventListener('click', e => {
+  const svg = e.target.closest && e.target.closest('#cpField');
+  if (svg && CP_EDIT) {
+    const g = e.target.closest('[data-who]');
+    if (g && g.classList.contains('cp-pick') && g.dataset.who !== CP_SEL.who) { CP_SEL.who = g.dataset.who; cpRender(); return; }
+    cpTap(e, svg); return;
+  }
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const act = el.dataset.act; if (!act.startsWith('cp-')) return;
+  const list = cpLoad();
+  if (act === 'cp-new') { CP_EDIT = cpNew(); CP_SEL.who = 'WR2'; }
+  else if (act === 'cp-edit') { const d = list.find(x => x.id === el.dataset.id); if (d) CP_EDIT = JSON.parse(JSON.stringify(d)); }
+  else if (act === 'cp-copy') { const d = list.find(x => x.id === el.dataset.id); if (d) { const c = JSON.parse(JSON.stringify(d)); c.id = 'cp_' + Date.now().toString(36); c.name = (d.name + ' 2').slice(0, 28); list.push(c); cpStore(list); cpInstall(); } }
+  else if (act === 'cp-del') { if (!confirm('Delete this play?')) return; cpStore(list.filter(x => x.id !== el.dataset.id)); cpInstall(); toast('Play deleted.'); }
+  else if (act === 'cp-cancel') CP_EDIT = null;
+  else if (act === 'cp-who') CP_SEL.who = el.dataset.who;
+  else if (act === 'cp-undo') { const a = CP_EDIT.draw[CP_SEL.who]; if (a) a.pop(); }
+  else if (act === 'cp-clear') CP_EDIT.draw[CP_SEL.who] = [];
+  else if (act === 'cp-save') {
+    const d = CP_EDIT; d.name = (d.name || '').trim() || 'My Play';
+    if (d.type === 'pass' && !CP_SKILL.some(k => d.assign[k] !== 'block' && (d.assign[k] !== 'custom' || (d.draw[k] || []).length))) { toast('Give at least one player a route.'); return; }
+    const i = list.findIndex(x => x.id === d.id); if (i >= 0) list[i] = d; else list.push(d);
+    cpStore(list); cpInstall(); CP_EDIT = null; toast(`"${d.name}" saved to your playbook.`);
+  }
+  cpRender();
+});
+document.addEventListener('change', e => {
+  const el = e.target.closest && e.target.closest('[data-cp]'); if (!el || !CP_EDIT) return;
+  const k = el.dataset.cp, d = CP_EDIT;
+  if (k === 'name') { d.name = el.value.slice(0, 28); return; }
+  if (k === 'type') { d.type = el.value; CP_SEL.who = d.type === 'pass' ? 'WR1' : d.type === 'run' ? 'RB' : 'QB'; }
+  if (k === 'form') d.form = el.value;
+  if (k === 'pa') d.pa = el.checked;
+  if (k === 'assign') { d.assign[CP_SEL.who] = el.value; }
+  if (k === 'stop') { d.stop = d.stop || {}; d.stop[CP_SEL.who] = el.checked; }
+  cpRender();
+});
+document.addEventListener('input', e => { const el = e.target.closest && e.target.closest('[data-cp="name"]'); if (el && CP_EDIT) CP_EDIT.name = el.value.slice(0, 28); });
 
 </script>

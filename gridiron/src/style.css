@@ -332,3 +332,38 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
 .sl { color: var(--amber); letter-spacing: 2px; font-size: 12px; }
 
 #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---- timeouts, flags, two-minute drill ---- */
+.sb-team .tos { position: absolute; left: 10px; right: 10px; bottom: 2px; display: flex; gap: 3px; z-index: 1; }
+.tos i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,.22); }
+.tos i.on { background: #ffd23f; }
+.tos.big { display: inline-flex; gap: 4px; vertical-align: middle; margin-left: 4px; }
+.tos.big i { width: 16px; flex: none; height: 6px; background: var(--bg3); border: 1px solid var(--line); }
+.tos.big i.on { background: var(--amber); border-color: var(--amber); }
+.pc-clock { gap: 10px; align-items: center; margin: 4px 0 10px; flex-wrap: wrap; }
+.banner.flag .bt { background: none; color: #ffd23f; -webkit-text-fill-color: #ffd23f; }
+.banner.flag .bt::before { content: "🚩 "; }
+
+/* ---- records ---- */
+.ap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.ap { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--bg3); border-radius: 8px; font-size: 14px; }
+.ap .pos-chip { font-size: 11px; padding: 1px 6px; }
+.retnum { display: flex; flex-direction: column; align-items: center; padding: 8px 14px; border: 2px solid var(--amber); border-radius: 10px; min-width: 70px; }
+.retnum b { font: 800 30px/1 var(--f-display); color: var(--amber); }
+.retnum span { font-size: 12px; text-align: center; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---- playbook maker ---- */
+.cp-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.cp-card { cursor: default; }
+.cp-card .row { margin-top: 8px; gap: 6px; }
+.cp-form { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; align-items: flex-end; }
+.cp-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.cp-form label.row { flex-direction: row; align-items: center; }
+.cp-wrap { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 12px; }
+.cp-field { width: 100%; display: block; background: linear-gradient(180deg, #2f7a3a, #276a31); border-radius: 10px; touch-action: manipulation; cursor: crosshair; user-select: none; }
+.cp-pick { cursor: pointer; }
+.cp-side label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; margin: 8px 0; }
+.cp-side label.row { flex-direction: row; align-items: center; }
+.cp-who { gap: 6px; flex-wrap: wrap; }
+@media (max-width: 760px) { .cp-wrap { grid-template-columns: 1fr; } }
