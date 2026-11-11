@@ -8,7 +8,7 @@
 const CP_KEY = 'gd_custom_plays';
 const CP_SKILL = ['WR1', 'WR2', 'WR3', 'TE', 'RB'];
 const CP_TYPES = [['pass', 'Pass'], ['run', 'HB Run'], ['qbrun', 'QB Run']];
-const CP_FORM_NAMES = { gun: 'Shotgun', single: 'Under center', trips: 'Trips', pistol: 'Pistol', empty: 'Empty', bunch: 'Bunch', iform: 'I-Form', tight: 'Tight' };
+const CP_FORM_NAMES = { wildcat: 'Wildcat', gun: 'Shotgun', single: 'Under center', trips: 'Trips', pistol: 'Pistol', empty: 'Empty', bunch: 'Bunch', iform: 'I-Form', tight: 'Tight' };
 
 // custom routes are objects: { pts: [[dx, dy] offsets from the player's start], stop }
 const _routePtsCP = LiveGame.prototype.routePts;
@@ -55,6 +55,15 @@ function cpCompile(d) {
     for (const k of ['WR1', 'WR2', 'WR3', 'TE']) { const a = d.assign[k]; if (a === 'custom' && draw[k] && draw[k].length) p.routes[k] = { pts: draw[k], stop: !!(d.stop || {})[k] }; else if (a && a !== 'block' && a !== 'custom') p.routes[k] = a; }
     p.desc = 'Designed QB run.';
   }
+  if (forms === 'wildcat') { // direct snap to the RB; the QB is split out as a receiver
+    p.directSnap = 'RB'; p.fakeRun = true;
+    if (p.type === 'pass') {
+      p.type = 'trick'; p.path = [[0.6, 1.5], [-0.4, 0.5]]; delete p.routes.RB;
+      const a = d.assign.QB || 'block';
+      if (a === 'custom' && draw.QB && draw.QB.length) p.routes.QB = { pts: draw.QB, stop: !!(d.stop || {}).QB };
+      else if (a !== 'block' && a !== 'custom') p.routes.QB = a;
+    } else { p.type = 'trick'; p.directNoPass = true; delete p.qbPath; p.path = draw.RB && draw.RB.length ? stepsOf(draw.RB) : [[0.6, 0.8], [1.6, 2.2], [12, 3]]; }
+  }
   return p;
 }
 function cpInstall() {
@@ -82,7 +91,7 @@ function viewPlaybook() {
 
 // field drawing: offense goes up; svg 100 wide, LOS at y=52
 const CPY = dx => 52 - dx * 1.6, CPX = y => (y / FIELD_W) * 100;
-function cpWho(d) { return d.type === 'run' ? ['RB'] : d.type === 'qbrun' ? ['QB', 'RB', 'WR1', 'WR2', 'WR3', 'TE'] : CP_SKILL; }
+function cpWho(d) { if (d.form === 'wildcat') return d.type === 'pass' ? ['QB', 'WR1', 'WR2', 'WR3', 'TE'] : ['RB']; return d.type === 'run' ? ['RB'] : d.type === 'qbrun' ? ['QB', 'RB', 'WR1', 'WR2', 'WR3', 'TE'] : CP_SKILL; }
 function cpStart(d, k) { const F = FORMS[d.form] || FORMS.gun; return [F[k][0], MID_Y + F[k][1]]; }
 function cpEditor() {
   const d = CP_EDIT, F = FORMS[d.form] || FORMS.gun, who = cpWho(d);
@@ -99,7 +108,7 @@ function cpEditor() {
   for (const k of all) {
     const [sx, sy] = cpStart(d, k);
     let pts = null, dash = false;
-    if (k === 'QB') { if (p.qbPath) { pts = LiveGame.prototype.routePts.call(null, { pts: cpCum(p.qbPath) }, sx, sy, MID_Y); dash = true; } }
+    if (k === 'QB') { if (p.routes.QB && p.routes.QB !== 'block') pts = LiveGame.prototype.routePts.call(null, p.routes.QB, sx, sy, MID_Y); else if (p.qbPath) { pts = LiveGame.prototype.routePts.call(null, { pts: cpCum(p.qbPath) }, sx, sy, MID_Y); dash = true; } }
     else if (p.routes[k] && p.routes[k] !== 'block') pts = LiveGame.prototype.routePts.call(null, p.routes[k], sx, sy, MID_Y);
     else if (k === 'RB' && p.path) pts = LiveGame.prototype.routePts.call(null, { pts: cpCum(p.path) }, sx, sy, MID_Y);
     if (pts) {
@@ -111,8 +120,9 @@ function cpEditor() {
     s += `<g class="${can ? 'cp-pick' : ''}" data-who="${k}"><circle cx="${CPX(sy)}" cy="${CPY(sx)}" r="${on ? 2.6 : 2}" fill="${col[k]}" stroke="${on ? '#fff' : '#111'}" stroke-width="${on ? .7 : .3}" opacity="${can ? 1 : .55}"/><text x="${CPX(sy)}" y="${CPY(sx) + 4.6}" font-size="2.3" text-anchor="middle" fill="#fff" font-weight="700">${k}</text></g>`;
   }
   s += `</svg>`;
-  const sel = CP_SEL.who, a = sel === 'QB' ? 'custom' : (d.assign[sel] || (d.type === 'pass' ? 'block' : 'custom'));
-  const presets = d.type === 'pass' || (d.type === 'qbrun' && sel !== 'QB' && sel !== 'RB') ? `<label>Route <select data-cp="assign">${[['custom', '✏️ Draw my own'], ['block', 'Block'], ...Object.keys(ROUTES).map(r => [r, r[0].toUpperCase() + r.slice(1)])].map(([v, n]) => `<option value="${v}" ${a === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>` : '';
+  const wcQB = d.form === 'wildcat' && d.type === 'pass';
+  const sel = CP_SEL.who, a = sel === 'QB' && !wcQB ? 'custom' : (d.assign[sel] || (d.type === 'pass' ? 'block' : 'custom'));
+  const presets = (d.type === 'pass' && (sel !== 'QB' || wcQB)) || (d.type === 'qbrun' && d.form !== 'wildcat' && sel !== 'QB' && sel !== 'RB') ? `<label>Route <select data-cp="assign">${[['custom', '✏️ Draw my own'], ['block', 'Block'], ...Object.keys(ROUTES).map(r => [r, r[0].toUpperCase() + r.slice(1)])].map(([v, n]) => `<option value="${v}" ${a === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>` : '';
   const drawn = (d.draw[sel] || []).length;
   return `<div class="card"><div class="row"><h2 class="grow" style="margin:0">Playbook maker</h2><button class="btn sm ghost" data-act="cp-cancel">Cancel</button><button class="btn sm primary" data-act="cp-save">Save play</button></div>
     <div class="cp-form">
@@ -127,7 +137,7 @@ function cpEditor() {
       ${presets}
       ${a === 'custom' ? `<p class="small">${drawn ? `${drawn} point${drawn === 1 ? '' : 's'} drawn.` : 'Tap the field to start drawing.'}</p>
         <div class="row"><button class="btn sm" data-act="cp-undo" ${drawn ? '' : 'disabled'}>Undo point</button><button class="btn sm ghost" data-act="cp-clear" ${drawn ? '' : 'disabled'}>Clear</button></div>
-        ${d.type !== 'run' && sel !== 'QB' && sel !== 'RB' || (d.type === 'pass' && sel === 'RB') ? `<label class="row" style="gap:6px;margin-top:8px"><input type="checkbox" data-cp="stop" ${(d.stop || {})[sel] ? 'checked' : ''}> Sit down at the end (hook / curl)</label>` : ''}` : ''}
+        ${d.type !== 'run' && (sel !== 'QB' || wcQB) && sel !== 'RB' || (d.type === 'pass' && sel === 'RB') ? `<label class="row" style="gap:6px;margin-top:8px"><input type="checkbox" data-cp="stop" ${(d.stop || {})[sel] ? 'checked' : ''}> Sit down at the end (hook / curl)</label>` : ''}` : ''}
       <p class="muted small" style="margin-top:12px">Tips: a sharp cut works best 5+ yards apart. Routes over 40 yards get cut off. The CPU won't use your plays — they're yours.</p>
     </div></div>`;
 }
@@ -149,7 +159,7 @@ function cpTap(ev, svg) {
   const o = [Math.round(clamp(dx - sx, -12, 45) * 2) / 2, Math.round((y - sy) * 2) / 2];
   if (Math.hypot(o[0] - prev[0], o[1] - prev[1]) < 1) return;
   arr.push(o);
-  if (k !== 'QB') d.assign[k] = 'custom';
+  if (k !== 'QB' || (d.form === 'wildcat' && d.type === 'pass')) d.assign[k] = 'custom';
   cpRender();
 }
 document.addEventListener('click', e => {
@@ -183,7 +193,7 @@ document.addEventListener('change', e => {
   const k = el.dataset.cp, d = CP_EDIT;
   if (k === 'name') { d.name = el.value.slice(0, 28); return; }
   if (k === 'type') { d.type = el.value; CP_SEL.who = d.type === 'pass' ? 'WR1' : d.type === 'run' ? 'RB' : 'QB'; }
-  if (k === 'form') d.form = el.value;
+  if (k === 'form') { d.form = el.value; if (d.form === 'wildcat' && d.type === 'qbrun') d.type = 'run'; }
   if (k === 'pa') d.pa = el.checked;
   if (k === 'assign') { d.assign[CP_SEL.who] = el.value; }
   if (k === 'stop') { d.stop = d.stop || {}; d.stop[CP_SEL.who] = el.checked; }

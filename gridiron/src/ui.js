@@ -685,7 +685,9 @@ function playSVG(play, kind) {
     if (play.qbPath) { const q = cum(pos.QB[0], by, play.qbPath); s += `<polyline fill="none" stroke="#ffb81c" stroke-width="1.3" stroke-dasharray="2 1.2" points="${[[pos.QB[0], by], ...q].map(([a, b]) => `${X(clamp(b, 0, FIELD_W)).toFixed(1)},${clamp(Y(Math.min(a, 26)), 1, 61).toFixed(1)}`).join(' ')}"/>`; }
     if (play.read) { const rd = { DL4: [1.1, 4.4], DL1: [1.1, -4.4], LB1: [5, -3.5], LB2: [5, 3.5] }[play.read]; if (rd) s += `<rect x="${X(by + rd[1]) - 4}" y="${Y(rd[0]) - 2.6}" width="8" height="4.4" rx="1" fill="#ff5a4e"/><text x="${X(by + rd[1])}" y="${Y(rd[0]) + 0.6}" font-size="3" text-anchor="middle" fill="#fff" font-weight="800">READ</text>`; }
     if (play.lateralTo || play.toss || play.flea) s += `<text x="96" y="7" font-size="5" text-anchor="end" fill="#ffb81c" font-weight="800">${play.flea ? 'FLICK' : 'LAT'}</text>`;
-    s += `<circle cx="${X(by)}" cy="${Y(pos.QB[0])}" r="1.9" fill="#fff" stroke="#111" stroke-width=".5"/>`;
+    if (play.routes && play.routes.QB) { const q = LiveGame.prototype.routePts.call(null, play.routes.QB, pos.QB[0], pos.QB[1], by); s += `<polyline fill="none" stroke="#fff" stroke-width="1.2" stroke-linejoin="round" points="${[[pos.QB[0], pos.QB[1]], ...q].map(([a, b]) => `${X(clamp(b, 0, FIELD_W)).toFixed(1)},${clamp(Y(Math.min(a, 26)), 1, 61).toFixed(1)}`).join(' ')}"/>`; }
+    if (play.jetPath) { const j = cum(pos.WR3[0], pos.WR3[1], play.jetPath); s += `<polyline fill="none" stroke="${RCOL[2]}" stroke-width="1" stroke-dasharray="1.6 1" points="${[pos.WR3, ...j].map(([a, b]) => `${X(clamp(b, 0, FIELD_W)).toFixed(1)},${clamp(Y(Math.min(a, 26)), 1, 61).toFixed(1)}`).join(' ')}"/>`; }
+    s += `<circle cx="${X(pos.QB[1])}" cy="${Y(pos.QB[0])}" r="1.9" fill="#fff" stroke="#111" stroke-width=".5"/>`;
   } else {
     const spots = { DL1: [1.1, -4.4], DL2: [1.1, -1.5], DL3: [1.1, 1.5], DL4: [1.1, 4.4], LB1: [5, -3.5], LB2: [5, 3.5], CB1: [5.5, -18], CB2: [5.5, 17.5], CB3: [4.5, -9.5], S1: [13, -9], S2: [13, 9] };
     for (const r in spots) {
@@ -725,7 +727,7 @@ function showPlayCall(mode, audible) {
     }
     if (gs.score[gs.poss] > gs.score[1 - gs.poss] && gs.quarter >= 4 && gs.clock < 150) specials.push(`<button class="play special" data-act="call-play" data-id="kneel"><span class="tag">Clock</span><span class="pn">QB Kneel</span><span class="pd">Run out the clock.</span></button>`);
     if (twoMinuteTime(gs) && (gs.lastRunoff || 0) > 0 && gs.down < 4) specials.unshift(`<button class="play special" data-act="call-play" data-id="spike"><span class="tag">Clock</span><span class="pn">Spike</span><span class="pd">Stop the clock now. Costs a down.</span></button>`);
-    const cats = ['My Plays', 'Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
+    const cats = ['My Plays', 'Run', 'Wildcat', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
     cards = specials.join('') + cats.map(c => { const ps = OFF_PLAYS.filter(p => (p.cat || 'Pass') === c); if (!ps.length) return ''; return `<div class="pc-sec" data-cat="${c}" ${PC_TAB !== 'All' && PC_TAB !== c ? 'hidden' : ''}><h3 class="pc-cat">${c === 'Trick' ? 'Trick plays' : c === 'RPO' ? 'RPOs' : c} <span class="muted small">${ps.length}</span></h3>` + ps.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'off')}<span class="tag">${c}</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('') + '</div>'; }).join('');
   } else {
     cards = DEF_PLAYS.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'def')}<span class="tag">Defense</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('');
@@ -733,7 +735,7 @@ function showPlayCall(mode, audible) {
   el.innerHTML = `<div class="pc-inner wrap"><div class="pc-head"><h2>${audible ? 'Audible' : mode === 'off' ? 'Call your play' : 'Call your defense'}</h2><span class="pill amber">${sit}</span><span class="grow"></span>
     <button class="btn sm" data-act="call-auto">Ask coach</button><button class="btn sm" data-act="sim-drive">Sim this drive</button>${mode === 'def' ? '<button class="btn sm primary" data-act="offense-only-now">Offense only from now on</button>' : ''}<button class="btn sm ghost" data-act="sim-game-rest">Sim rest of game</button></div>
     ${clockBar(lg, mode)}
-    ${mode === 'off' ? `<div class="pc-tabs">${['All', ...(OFF_PLAYS.some(p => p.custom) ? ['My Plays'] : []), 'Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'].map(t => `<button class="tab ${PC_TAB === t ? 'on' : ''}" data-act="pc-tab" data-cat="${t}">${t === 'Trick' ? 'Trick plays' : t}</button>`).join('')}</div>` : ''}
+    ${mode === 'off' ? `<div class="pc-tabs">${['All', ...(OFF_PLAYS.some(p => p.custom) ? ['My Plays'] : []), 'Run', 'Wildcat', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'].map(t => `<button class="tab ${PC_TAB === t ? 'on' : ''}" data-act="pc-tab" data-cat="${t}">${t === 'Trick' ? 'Trick plays' : t}</button>`).join('')}</div>` : ''}
     <div class="plays">${cards}</div></div>`;
   el.hidden = false;
 }
