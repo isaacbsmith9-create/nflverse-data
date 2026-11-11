@@ -357,7 +357,7 @@ function viewSettings() {
   return `<div class="card stack"><h2>Game settings</h2>
     <label>Difficulty <select data-act="set" data-key="diff">${[['rookie', 'Rookie'], ['pro', 'Pro'], ['allpro', 'All-Pro'], ['legend', 'Legend']].map(([k, n]) => `<option value="${k}" ${s.diff === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
     <label>Quarter length <select data-act="set" data-key="qlen">${[[120, '2 min'], [180, '3 min'], [240, '4 min'], [300, '5 min'], [480, '8 min']].map(([k, n]) => `<option value="${k}" ${+s.qlen === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-    <label class="row" style="gap:8px"><input type="checkbox" data-act="set" data-key="simDef" ${s.simDef ? 'checked' : ''}> Sim CPU possessions (you only play offense)</label></div>
+    <label class="row" style="gap:8px"><input type="checkbox" data-act="set" data-key="simDef" ${s.simDef ? 'checked' : ''}> <b>Offense only</b>: the CPU's drives are simulated, you only play offense</label></div>
     <div class="card stack"><h2>Save &amp; backup</h2><div class="muted small">Franchise slot ${SLOT}. The game saves automatically after every action.</div>
     <div class="row"><button class="btn" data-act="save-now">Save now</button><button class="btn" data-act="export">Export save</button><button class="btn" data-act="import">Import save</button></div></div>
     <div class="card stack"><h2>Danger zone</h2><div class="row"><button class="btn danger" data-act="del-current">Delete this franchise</button></div></div>`;
@@ -474,10 +474,12 @@ document.addEventListener('click', e => {
     case 'resume': $('#pause').hidden = true; if (GAME) GAME.paused = false; break;
     case 'sim-game-rest': simRestOfGame(); break;
     case 'toggle-touch': touchMode = !touchMode; applyTouch(); break;
+    case 'toggle-simdef': { LEAGUE.settings.simDef = !LEAGUE.settings.simDef; save(); $('#simDefBtn').textContent = 'Offense only: ' + (LEAGUE.settings.simDef ? 'On' : 'Off'); toast(LEAGUE.settings.simDef ? 'Offense only ON: the CPU\'s drives will be simulated.' : 'Offense only OFF: you play defense too.'); break; }
     case 'toggle-cam': if (GAME) { const m = GAME.live.camMode === 'top' ? '3d' : 'top'; GAME.live.camMode = m; LEAGUE.settings.cam = m; save(); toast(m === 'top' ? 'Camera: Top-down' : 'Camera: Broadcast'); } break;
     case 'toggle-sound': window.__mute = !window.__mute; try { localStorage.setItem('gd_mute', window.__mute ? '1' : '0'); } catch (e) { } toast(window.__mute ? 'Sound off' : 'Sound on'); break;
     case 'call-play': if (GAME) { $('#playcall').hidden = true; GAME.live.choose(el.dataset.id); } break;
     case 'call-auto': if (GAME) { $('#playcall').hidden = true; const lg = GAME.live; lg.choose(lg.userOnOffense() ? autoOffCall(lg.gs) : cpuDefCall(lg.gs).id); } break;
+    case 'offense-only-now': if (GAME) { LEAGUE.settings.simDef = true; save(); $('#simDefBtn').textContent = 'Offense only: On'; $('#playcall').hidden = true; toast('Offense only ON. Turn it off any time in the pause menu.'); GAME.live.next(); } break;
     case 'sim-drive': if (GAME) { $('#playcall').hidden = true; simDrive(GAME.live.gs); GAME.live.h.update(); GAME.live.next(); } break;
     case 'game-continue': endLiveGame(); break;
   }
@@ -662,7 +664,7 @@ function showPlayCall(mode) {
     cards = DEF_PLAYS.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'def')}<span class="tag">Defense</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('');
   }
   el.innerHTML = `<div class="pc-inner wrap"><div class="pc-head"><h2>${mode === 'off' ? 'Call your play' : 'Call your defense'}</h2><span class="pill amber">${sit}</span><span class="grow"></span>
-    <button class="btn sm" data-act="call-auto">Ask coach</button>${mode === 'off' ? '<button class="btn sm" data-act="sim-drive">Sim this drive</button>' : ''}<button class="btn sm ghost" data-act="sim-game-rest">Sim rest of game</button></div>
+    <button class="btn sm" data-act="call-auto">Ask coach</button><button class="btn sm" data-act="sim-drive">Sim this drive</button>${mode === 'def' ? '<button class="btn sm primary" data-act="offense-only-now">Offense only from now on</button>' : ''}<button class="btn sm ghost" data-act="sim-game-rest">Sim rest of game</button></div>
     <div class="plays">${cards}</div></div>`;
   el.hidden = false;
 }
@@ -781,7 +783,7 @@ function applyTouch() {
     if (rec && lg.phase === 'live') lg.input.throwTo = rec;
     else if (lg.phase === 'pre' && lg.userOnOffense() && !touchMode) lg.input.actionEdge = true;
   });
-  $('#pauseBtn').addEventListener('click', () => { if (!GAME) return; const p = $('#pause'); p.hidden = false; GAME.paused = true; $('#pauseLog').innerHTML = GAME.gs.log.slice(-8).reverse().map(l => esc(l.txt)).join('<br>'); });
+  $('#pauseBtn').addEventListener('click', () => { if (!GAME) return; $('#simDefBtn').textContent = 'Offense only: ' + (LEAGUE.settings.simDef ? 'On' : 'Off'); const p = $('#pause'); p.hidden = false; GAME.paused = true; $('#pauseLog').innerHTML = GAME.gs.log.slice(-8).reverse().map(l => esc(l.txt)).join('<br>'); });
 })();
 
 // ---------- boot ----------

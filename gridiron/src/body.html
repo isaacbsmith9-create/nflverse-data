@@ -24,7 +24,7 @@
         <label>Difficulty <select id="setDiff"><option value="rookie">Rookie</option><option value="pro" selected>Pro</option><option value="allpro">All-Pro</option><option value="legend">Legend</option></select></label>
         <label>Quarter length <select id="setQlen"><option value="120">2 min</option><option value="180">3 min</option><option value="240" selected>4 min</option><option value="300">5 min</option><option value="480">8 min</option></select></label>
         <label id="awayWrap" hidden>Opponent <select id="setAway"></select></label>
-        <label class="row" style="gap:6px"><input type="checkbox" id="setSimDef"> Sim CPU possessions (offense only)</label>
+        <label class="row" style="gap:6px"><input type="checkbox" id="setSimDef"> <b>Offense only</b>&nbsp;(CPU drives are simmed)</label>
         <span class="grow"></span>
         <button class="btn primary" data-act="setup-go" id="setupGo" disabled>Start</button>
       </div>
@@ -66,6 +66,7 @@
       <div class="row">
         <button class="btn primary" data-act="resume">Resume</button>
         <button class="btn" data-act="sim-game-rest">Sim rest of game</button>
+        <button class="btn" data-act="toggle-simdef" id="simDefBtn">Offense only: Off</button>
         <button class="btn" data-act="toggle-cam">Switch camera</button>
         <button class="btn" data-act="toggle-touch">Toggle touch controls</button>
         <button class="btn" data-act="toggle-sound">Toggle sound</button>
