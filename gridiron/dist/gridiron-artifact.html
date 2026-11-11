@@ -273,6 +273,7 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
       <div class="eyebrow" style="margin-bottom:10px">Franchise saves</div>
       <div class="menu-grid" id="slots"></div>
     </div>
+    <p class="muted small" id="fanNote" hidden>Unofficial fan-made game. Not affiliated with or endorsed by the NFL, NFLPA or any team. Rosters, ages and schedules come from public nflverse data; player ratings and team emblems are this game's own.</p>
     <p class="muted small">Saves are stored in this browser. Use Export in Settings to back up a franchise or move it to another device.</p>
   </div>
 </section>
@@ -3353,6 +3354,7 @@ try { window.__mute = localStorage.getItem('gd_mute') === '1'; } catch (e) { }
 // ============================================================ MENU
 function renderMenu() {
   show('menu');
+  $('#fanNote').hidden = !hasRealData();
   const box = $('#slots'); let h = '';
   for (let s = 1; s <= 3; s++) {
     const m = saveMeta(s);

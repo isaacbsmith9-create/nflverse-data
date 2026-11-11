@@ -21,6 +21,7 @@ try { window.__mute = localStorage.getItem('gd_mute') === '1'; } catch (e) { }
 // ============================================================ MENU
 function renderMenu() {
   show('menu');
+  $('#fanNote').hidden = !hasRealData();
   const box = $('#slots'); let h = '';
   for (let s = 1; s <= 3; s++) {
     const m = saveMeta(s);

@@ -16,6 +16,8 @@ const innerReal = `${body}\n<script>\n${realJs}${js}\n</script>`;
 fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(__dirname, 'dist', 'gridiron-artifact.html'),
   `${title}\n<meta name="claude:viewport-fit-sides" content="cover">\n${fonts}\n<style>\n${css}\n</style>\n${inner}\n`);
+fs.writeFileSync(path.join(__dirname, 'dist', 'gridiron-nfl-artifact.html'),
+  `<title>Gridiron Dynasty NFL</title>\n<meta name="claude:viewport-fit-sides" content="cover">\n${fonts}\n<style>\n${css}\n</style>\n${innerReal}\n`);
 fs.writeFileSync(path.join(__dirname, 'index.html'), `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
