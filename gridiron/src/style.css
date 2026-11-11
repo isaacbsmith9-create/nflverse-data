@@ -275,3 +275,10 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
 .sb-mid .dd { background: #ffd23f; color: #1a1200; border-radius: 4px; padding: 0 6px; margin-top: 2px; }
 .banner .bt { background: linear-gradient(180deg, #fff 30%, #d8dee6); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 4px 0 rgba(0,0,0,.4)) drop-shadow(0 0 24px rgba(0,0,0,.5)); }
 .banner.big .bt { background: linear-gradient(180deg, #fff4b0 10%, #ffb81c 60%, #ff8a00); -webkit-background-clip: text; background-clip: text; }
+
+/* ---- trade finder ---- */
+.tf { border-color: #3b6458; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.offer { display: grid; gap: 10px; padding: 12px; }
+.offer-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 640px) { .offer-cols { grid-template-columns: 1fr; } }

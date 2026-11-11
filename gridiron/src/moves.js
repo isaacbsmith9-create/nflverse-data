@@ -98,3 +98,48 @@ function negotiate(L, p, sal, yrs) {
   p.neg.mood = Math.max(0.45, p.neg.mood - 0.2);
   return { ok: false, msg: `${pshort(p)} found that offer insulting. Asking: ${fmtMoney(ask)}/yr.` };
 }
+
+// ---------- trade finder: "I want this player" ----------
+// Builds packages from the user's roster/picks that the other team would accept.
+function userStarters(L) {
+  const t = L.teams[L.userTid]; fixDepth(L, t);
+  const s = new Set();
+  for (const pos of POSITIONS) for (const id of (t.depth[pos] || []).slice(0, STARTERS[pos])) s.add(id);
+  return s;
+}
+function findPackagesFor(L, get, opts = {}) {
+  const firstId = get.players[0];
+  const tid = firstId != null ? L.players[firstId].tid : (get.picks[0] && get.picks[0].owner);
+  if (tid == null || tid === L.userTid) return [];
+  const need = sideValue(L, get) * 1.1;
+  const protect = opts.protect ? userStarters(L) : new Set();
+  const u = L.teams[L.userTid];
+  const assets = u.roster.map(id => L.players[id]).filter(p => !p.ir && !protect.has(p.id))
+    .map(p => ({ kind: 'player', id: p.id, v: playerValue(p) }))
+    .concat(L.picks.filter(pk => pk.owner === L.userTid).map(pk => ({ kind: 'pick', pk, v: pickValue(L, pk) })))
+    .filter(a => a.v > need * 0.05).sort((a, b) => b.v - a.v);
+  const combos = [];
+  const add = list => {
+    const tot = list.reduce((s, a) => s + a.v, 0);
+    if (tot < need || tot > need * 1.9) return;
+    const give = { players: list.filter(a => a.kind === 'player').map(a => a.id), picks: list.filter(a => a.kind === 'pick').map(a => a.pk) };
+    combos.push({ give, tot, n: list.length });
+  };
+  const top = assets.slice(0, 30);
+  for (const a of top) add([a]);
+  for (let i = 0; i < top.length; i++) for (let j = i + 1; j < top.length; j++) add([top[i], top[j]]);
+  if (combos.length < 4) for (let i = 0; i < Math.min(14, top.length); i++) for (let j = i + 1; j < Math.min(14, top.length); j++) for (let k = j + 1; k < Math.min(14, top.length); k++) add([top[i], top[j], top[k]]);
+  // cheapest first, fewer pieces preferred; avoid repeating the same main piece too often
+  combos.sort((a, b) => (a.tot * (1 + a.n * 0.04)) - (b.tot * (1 + b.n * 0.04)));
+  const out = [], used = {};
+  for (const c of combos) {
+    const key = c.give.players[0] != null ? 'p' + c.give.players[0] : 'k' + (c.give.picks[0] && c.give.picks[0].season + '-' + c.give.picks[0].round);
+    if ((used[key] || 0) >= 2) continue;
+    const ev = tradeEval(L, tid, c.give, get);
+    if (!ev.ok) continue;
+    used[key] = (used[key] || 0) + 1;
+    out.push({ tid, give: c.give, get, value: c.tot, pct: Math.round(c.tot / (need / 1.1) * 100) });
+    if (out.length >= (opts.max || 8)) break;
+  }
+  return out;
+}

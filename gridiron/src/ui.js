@@ -277,6 +277,36 @@ function viewStats() {
 
 // ---------- trade ----------
 let TRADE = { tid: null, give: { players: [], picks: [] }, get: { players: [], picks: [] } };
+let TF = { mode: 'get', q: '', protect: true };
+function tradeFinderCard() {
+  return `<div class="card stack tf"><div class="row"><h2 class="grow" style="margin:0">Trade Finder</h2>
+    <div class="seg"><button class="btn sm ${TF.mode === 'get' ? 'primary' : ''}" data-act="tf-mode" data-mode="get">I want to get…</button><button class="btn sm ${TF.mode === 'away' ? 'primary' : ''}" data-act="tf-mode" data-mode="away">I want to trade away…</button></div></div>
+    ${TF.mode === 'get' ? `<div class="row"><input type="text" id="tfSearch" class="grow" placeholder="Type a player's name, or a position like QB, WR, EDGE… (DL), CB" value="${esc(TF.q)}" autocomplete="off">
+      <label class="row small" style="gap:6px"><input type="checkbox" id="tfProtect" ${TF.protect ? 'checked' : ''}> Don't trade my starters</label></div>
+      <div id="tfResults">${tfResults()}</div>`
+    : `<div class="muted small">Pick who to shop. Every team sends you its best offer. To shop several players at once, check them in the <b>You give</b> list below and press <b>Find offers from all teams</b>.</div>
+      <div class="scroll-list" style="max-height:300px">${UT().roster.map(id => LEAGUE.players[id]).filter(p => !p.ir).sort((a, b) => playerValue(b) - playerValue(a)).map(p => `<div class="pickrow">${ovrTag(p.ovr)}<span style="width:28px">${p.pos}</span><span class="grow">${esc(pname(p))} <span class="muted small">${p.age}y · ${fmtMoney(p.con.sal)} · ${p.con.yrs}yr</span></span><button class="btn sm" data-act="tf-shop" data-pid="${p.id}">Shop him</button></div>`).join('')}</div>`}
+  </div>`;
+}
+function tfResults() {
+  const L = LEAGUE, q = TF.q.trim().toLowerCase();
+  if (!q) return '<div class="muted small">Example: type <b>Chase</b>, <b>Mahomes</b> or <b>QB</b>.</div>';
+  const posMap = { edge: 'DL', de: 'DL', dt: 'DL', ot: 'OL', og: 'OL', c: 'OL', fs: 'S', ss: 'S', hb: 'RB', ilb: 'LB', olb: 'LB' };
+  const pos = POSITIONS.find(p => p.toLowerCase() === q) || posMap[q];
+  let list = Object.values(L.players).filter(p => p.tid != null && p.tid >= 0 && p.tid !== L.userTid);
+  list = pos ? list.filter(p => p.pos === pos) : list.filter(p => (p.first + ' ' + p.last).toLowerCase().includes(q));
+  list = list.sort((a, b) => b.ovr - a.ovr).slice(0, 10);
+  if (!list.length) return '<div class="muted small">No players match that.</div>';
+  return `<div class="scroll-list" style="max-height:340px">${list.map(p => `<div class="pickrow">${ovrTag(p.ovr)}<span style="width:28px">${p.pos}</span><span class="grow">${esc(pname(p))} <span class="muted small">${L.teams[p.tid].abbr} · ${p.age}y · ${fmtMoney(p.con.sal)} · ${p.con.yrs}yr${p.dev !== 'N' ? ' · ' + devLabel(p.dev) : ''}</span></span><button class="btn sm primary" data-act="tf-find" data-pid="${p.id}">Find trades</button></div>`).join('')}</div>`;
+}
+function showTradeOffers(title, offers, emptyMsg) {
+  const L = LEAGUE; TRADE.offers = offers;
+  const line = side => side.players.map(id => { const p = L.players[id]; return `${ovrTag(p.ovr)} ${p.pos} ${esc(pname(p))} <span class="muted small">${p.age}y · ${fmtMoney(p.con.sal)}</span>`; }).concat(side.picks.map(pk => `<span class="pill">${pickLabel(L, pk)}</span>`)).join('<br>');
+  const rows = offers.map((o, i) => { const t = L.teams[o.tid];
+    return `<div class="card offer"><div class="row">${badge(t)}<b class="grow">${esc(teamName(t))} <span class="muted small">${recStr(t)}</span></b>${o.pct ? `<span class="pill">${o.pct}% of his value</span>` : ''}<button class="btn sm primary" data-act="accept-offer" data-i="${i}">Accept</button></div>
+      <div class="offer-cols"><div><div class="eyebrow">You give</div><div class="small" style="line-height:1.9">${line(o.give)}</div></div><div><div class="eyebrow">You get</div><div class="small" style="line-height:1.9">${line(o.get)}</div></div></div></div>`; }).join('');
+  modal(`<div class="modal-head"><h2>${title}</h2><button class="btn sm ghost x" data-act="close">✕</button></div>${rows || `<p class="muted">${emptyMsg}</p>`}`);
+}
 function viewTrade() {
   const L = LEAGUE, u = UT();
   if (!tradeAllowed(L)) return `<div class="card"><h2>Trades closed</h2><p>The trade deadline is after week 10. Trading reopens after the season (recap, re-signing and free agency).</p></div>`;
@@ -284,7 +314,7 @@ function viewTrade() {
   const other = L.teams[TRADE.tid];
   const plist = (team, side) => team.roster.map(id => L.players[id]).sort((a, b) => b.ovr - a.ovr).map(p => `<label class="pickrow"><input type="checkbox" data-act="trade-toggle" data-side="${side}" data-kind="player" data-id="${p.id}" ${TRADE[side].players.includes(p.id) ? 'checked' : ''}><span style="width:28px">${p.pos}</span><span class="grow">${esc(pshort(p))} <span class="muted small">${p.age}y · ${fmtMoney(p.con.sal)} · ${p.con.yrs}yr</span></span>${ovrTag(p.ovr)}</label>`).join('');
   const pk = (tid, side) => L.picks.filter(x => x.owner === tid).sort((a, b) => a.season - b.season || a.round - b.round).map(x => { const i = L.picks.indexOf(x); return `<label class="pickrow"><input type="checkbox" data-act="trade-toggle" data-side="${side}" data-kind="pick" data-id="${i}" ${TRADE[side].picks.includes(i) ? 'checked' : ''}><span class="grow">${pickLabel(L, x)}</span></label>`; }).join('');
-  return `<div class="card stack"><div class="row"><h2 class="grow" style="margin:0">Trade with</h2><select data-act="trade-team">${L.teams.filter(t => t.id !== L.userTid).map(t => `<option value="${t.id}" ${t.id === TRADE.tid ? 'selected' : ''}>${esc(teamName(t))} (${recStr(t)})</option>`).join('')}</select></div>
+  return tradeFinderCard() + `<div class="card stack"><div class="row"><h2 class="grow" style="margin:0">Build your own: trade with</h2><select data-act="trade-team">${L.teams.filter(t => t.id !== L.userTid).map(t => `<option value="${t.id}" ${t.id === TRADE.tid ? 'selected' : ''}>${esc(teamName(t))} (${recStr(t)})</option>`).join('')}</select></div>
     <div id="tradeSummary"></div></div>
     <div class="trade-grid"><div class="card"><h2>You give</h2><div class="muted small">Cap room ${fmtMoney(capRoom(L, u))}</div><div class="scroll-list">${plist(u, 'give')}${pk(u.id, 'give')}</div></div>
     <div class="card"><h2>You get — ${esc(other.abbr)}</h2><div class="muted small">Cap room ${fmtMoney(capRoom(L, other))}</div><div class="scroll-list">${plist(other, 'get')}${pk(other.id, 'get')}</div></div></div>`;
@@ -442,20 +472,31 @@ document.addEventListener('click', e => {
       const err = signFA(L, L.userTid, p, yrs, sal); if (err) { $('#negMsg').textContent = err; break; }
       closeModal(); save(); renderHub(); toast(`Signed ${pname(p)}: ${yrs} yr / ${fmtMoney(sal)} per year.`); break;
     }
-    case 'shop': { TRADE = { tid: TRADE.tid, give: { players: [+el.dataset.pid], picks: [] }, get: { players: [], picks: [] } }; TAB = 'trade'; closeModal(); renderHub(); break; }
-    case 'trade-for': { const p = L.players[+el.dataset.pid]; TRADE = { tid: p.tid, give: { players: [], picks: [] }, get: { players: [p.id], picks: [] } }; TAB = 'trade'; closeModal(); renderHub(); break; }
+    case 'shop': { const p = L.players[+el.dataset.pid]; TF.mode = 'away'; TAB = 'trade'; closeModal(); renderHub(); const give = { players: [p.id], picks: [] }; showTradeOffers(`Offers for ${p.pos} ${esc(pname(p))}`, findOffers(L, give).map(o => Object.assign(o, { give })), 'No team wants him right now.'); break; }
+    case 'trade-for': { const p = L.players[+el.dataset.pid]; TRADE = { tid: p.tid, give: { players: [], picks: [] }, get: { players: [p.id], picks: [] } }; TF.mode = 'get'; TF.q = p.last; TAB = 'trade'; closeModal(); renderHub(); const offers = findPackagesFor(L, { players: [p.id], picks: [] }, { protect: TF.protect }); showTradeOffers(`Trades to get ${p.pos} ${esc(pname(p))} (${L.teams[p.tid].abbr})`, offers, 'No package works. Uncheck "Don\'t trade my starters" or pick a cheaper target.'); break; }
     case 'trade-finder': {
-      const s = tradeSides(); const offers = findOffers(L, s.give); TRADE.offers = offers;
+      const s = tradeSides(); const offers = findOffers(L, s.give).map(o => Object.assign(o, { give: s.give }));
       const giveTxt = s.give.players.map(id => `${L.players[id].pos} ${esc(pshort(L.players[id]))}`).concat(s.give.picks.map(pk => pickLabel(L, pk))).join(', ');
-      const rows = offers.map((o, i) => { const t = L.teams[o.tid]; const items = o.get.players.map(id => { const p = L.players[id]; return `${ovrTag(p.ovr)} ${p.pos} ${esc(pname(p))} <span class="muted small">${p.age}y · ${fmtMoney(p.con.sal)}</span>`; }).concat(o.get.picks.map(pk => `<span class="pill">${pickLabel(L, pk)}</span>`)).join('<br>');
-        return `<div class="card row" style="align-items:flex-start">${badge(t)}<div class="grow"><b>${esc(teamName(t))}</b> <span class="muted small">${recStr(t)}</span><div class="small" style="margin-top:6px;line-height:1.9">${items}</div></div><button class="btn sm primary" data-act="accept-offer" data-i="${i}">Accept</button></div>`; }).join('');
-      modal(`<div class="modal-head"><h2>Offers for ${giveTxt}</h2><button class="btn sm ghost x" data-act="close">✕</button></div>${rows || '<p class="muted">No team wants that package. Try adding a pick or a better player.</p>'}`);
-      break;
+      showTradeOffers(`Offers for ${giveTxt}`, offers, 'No team wants that package. Try adding a pick or a better player.'); break;
     }
     case 'accept-offer': {
-      const o = TRADE.offers && TRADE.offers[+el.dataset.i]; if (!o) break; const s = tradeSides();
-      const ev = tradeEval(L, o.tid, s.give, o.get); if (!ev.ok) { toast(ev.reason || 'Offer expired.'); break; }
-      executeTrade(L, o.tid, s.give, o.get); TRADE.give = { players: [], picks: [] }; TRADE.get = { players: [], picks: [] }; closeModal(); save(); renderHub(); toast('Trade done!'); break;
+      const o = TRADE.offers && TRADE.offers[+el.dataset.i]; if (!o) break; const give = o.give || tradeSides().give;
+      const ev = tradeEval(L, o.tid, give, o.get); if (!ev.ok) { toast(ev.reason || 'Offer expired.'); break; }
+      executeTrade(L, o.tid, give, o.get); TRADE.give = { players: [], picks: [] }; TRADE.get = { players: [], picks: [] }; closeModal(); save(); renderHub(); toast('Trade done!'); break;
+    }
+    case 'tf-mode': TF.mode = el.dataset.mode; renderHub(); break;
+    case 'tf-find': {
+      const p = L.players[+el.dataset.pid];
+      const offers = findPackagesFor(L, { players: [p.id], picks: [] }, { protect: TF.protect });
+      showTradeOffers(`Trades to get ${p.pos} ${esc(pname(p))} (${L.teams[p.tid].abbr})`, offers,
+        TF.protect ? `${L.teams[p.tid].abbr} won't take any package that leaves your starters alone. Uncheck "Don't trade my starters" or find a cheaper target.` : `You don't have enough value to get him. Try a cheaper target.`);
+      break;
+    }
+    case 'tf-shop': {
+      const p = L.players[+el.dataset.pid]; const give = { players: [p.id], picks: [] };
+      const offers = findOffers(L, give).map(o => Object.assign(o, { give }));
+      showTradeOffers(`Offers for ${p.pos} ${esc(pname(p))}`, offers, 'No team wants him right now. Try adding a pick in the builder below.');
+      break;
     }
     case 'trade-clear': TRADE.give = { players: [], picks: [] }; TRADE.get = { players: [], picks: [] }; renderHub(); break;
     case 'trade-propose': {
@@ -490,7 +531,11 @@ document.addEventListener('click', e => {
     case 'game-continue': endLiveGame(); break;
   }
 });
+document.addEventListener('input', e => {
+  if (e.target.id === 'tfSearch') { TF.q = e.target.value; const r = $('#tfResults'); if (r) r.innerHTML = tfResults(); }
+});
 document.addEventListener('change', e => {
+  if (e.target.id === 'tfProtect') { TF.protect = e.target.checked; return; }
   if (e.target.id === 'setLeague') { renderSetup(SETUP.mode, SETUP.slot); return; }
   const el = e.target.closest('[data-act]'); if (!el) return;
   const a = el.dataset.act, L = LEAGUE;
