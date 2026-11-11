@@ -105,6 +105,7 @@ function crowdPatterns(ctx, c1, c2) {
     if (r() < 0.07) continue; // empty seat
     people.push({ x: x + r() * 2, y: row * ROW, shirt: shirts[(r() * shirts.length) | 0], skin: skins[(r() * skins.length) | 0], hat: r() < 0.18 ? (r() < 0.6 ? c1 : c2) : null, armP: r(), h: 0.85 + r() * 0.3 });
   }
+  const cvs = [];
   const pats = [0, 1, 2].map(frame => {
     const cv = _mkCanvas(TW, TH), g = cv.getContext('2d');
     for (let row = 0; row < TH / ROW; row++) { // seat rows with step shadow
@@ -121,9 +122,10 @@ function crowdPatterns(ctx, c1, c2) {
       g.fillStyle = p.skin; g.beginPath(); g.arc(bx, by - bh - 2.6, 2.6, 0, Math.PI * 2); g.fill();
       if (p.hat) { g.fillStyle = p.hat; g.beginPath(); g.arc(bx, by - bh - 3.4, 2.7, Math.PI, 0); g.fill(); }
     }
+    cvs.push(cv);
     return ctx.createPattern(cv, 'repeat');
   });
-  _crowdPat = { key, pats };
+  _crowdPat = { key, pats, cvs };
   return pats;
 }
 

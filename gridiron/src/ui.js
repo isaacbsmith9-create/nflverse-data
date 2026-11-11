@@ -517,7 +517,7 @@ document.addEventListener('click', e => {
     case 'sim-game-rest': simRestOfGame(); break;
     case 'toggle-touch': touchMode = !touchMode; applyTouch(); break;
     case 'toggle-simdef': { LEAGUE.settings.simDef = !LEAGUE.settings.simDef; save(); $('#simDefBtn').textContent = 'Offense only: ' + (LEAGUE.settings.simDef ? 'On' : 'Off'); toast(LEAGUE.settings.simDef ? 'Offense only ON: the CPU\'s drives will be simulated.' : 'Offense only OFF: you play defense too.'); break; }
-    case 'toggle-cam': if (GAME) { const m = GAME.live.camMode === 'top' ? '3d' : 'top'; GAME.live.camMode = m; LEAGUE.settings.cam = m; save(); toast(m === 'top' ? 'Camera: Top-down' : 'Camera: Broadcast'); } break;
+    case 'toggle-cam': if (GAME) { const order = ['gl', '3d', 'top'], cur = GAME.live.camMode; const m = order[(order.indexOf(cur) + 1) % order.length]; GAME.live.camMode = m; LEAGUE.settings.cam2 = m; save(); toast({ gl: 'Camera: 3D', '3d': 'Camera: Classic broadcast', top: 'Camera: Top-down' }[m]); } break;
     case 'toggle-sound': window.__mute = !window.__mute; try { localStorage.setItem('gd_mute', window.__mute ? '1' : '0'); } catch (e) { } toast(window.__mute ? 'Sound off' : 'Sound on'); break;
     case 'call-play': if (GAME) { $('#playcall').hidden = true; GAME.live.choose(el.dataset.id); } break;
     case 'call-auto': if (GAME) { $('#playcall').hidden = true; const lg = GAME.live; lg.choose(lg.userOnOffense() ? autoOffCall(lg.gs) : cpuDefCall(lg.gs).id); } break;
@@ -586,7 +586,7 @@ function startLiveGame(hid, aid, userTid, opts = {}) {
   const live = new LiveGame(L, gs, userSide, {
     call: mode => showPlayCall(mode), update: () => updateHUD(), result: b => showBanner(b), toast: m => toast(m, 3000), over: () => showFinal(),
   });
-  live.camMode = L.settings.cam || '3d';
+  live.camMode = L.settings.cam2 || 'gl';
   GAME = { live, gs, opts, paused: false, last: performance.now() };
   applyTouch(); resizeCanvas(); updateHUD();
   $('#final').hidden = true; $('#pause').hidden = true; $('#banner').hidden = true;

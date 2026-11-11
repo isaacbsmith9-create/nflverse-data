@@ -3,7 +3,7 @@
 //  - dist/gridiron-artifact.html : body-only version for publishing as a claude.ai artifact
 const fs = require('fs'), path = require('path');
 const src = f => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
-const files = ['data.js', 'franchise.js', 'moves.js', 'real.js', 'sim.js', 'game.js', 'plays.js', 'extras.js', 'plays2.js', 'game3d.js', 'logos.js', 'ui.js', 'lineup.js', 'mgmt.js'];
+const files = ['data.js', 'franchise.js', 'moves.js', 'real.js', 'sim.js', 'game.js', 'plays.js', 'extras.js', 'plays2.js', 'game3d.js', 'gl3d.js', 'logos.js', 'ui.js', 'lineup.js', 'mgmt.js'];
 const js = files.map(src).join('\n');
 // the real-NFL data ships only in the standalone index.html, never in the artifact build
 const realJs = fs.existsSync(path.join(__dirname, 'src', 'nfl_data.js')) ? src('nfl_data.js') + '\n' : '';
@@ -11,8 +11,9 @@ const css = src('style.css'), body = src('body.html');
 const fonts = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
   '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Saira+Condensed:wght@600;700;800&display=swap">';
 const title = '<title>Gridiron Dynasty</title>';
-const inner = `${body}\n<script>\n${js}\n</script>`;
-const innerReal = `${body}\n<script>\n${realJs}${js}\n</script>`;
+const threeTag = '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>';
+const inner = `${body}\n${threeTag}\n<script>\n${js}\n</script>`;
+const innerReal = `${body}\n${threeTag}\n<script>\n${realJs}${js}\n</script>`;
 fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(__dirname, 'dist', 'gridiron-artifact.html'),
   `${title}\n<meta name="claude:viewport-fit-sides" content="cover">\n${fonts}\n<style>\n${css}\n</style>\n${inner}\n`);

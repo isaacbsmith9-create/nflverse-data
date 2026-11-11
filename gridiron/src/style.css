@@ -330,3 +330,5 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
 .t tr.exp td { background: rgba(255,184,28,.05); }
 .star { background: none; border: 0; color: var(--amber); font-size: 20px; cursor: pointer; padding: 0 4px; }
 .sl { color: var(--amber); letter-spacing: 2px; font-size: 12px; }
+
+#gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
