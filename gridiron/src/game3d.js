@@ -139,7 +139,7 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
   const zb = B - 9 - behind, zl = B - 9;
   const C = (H - H * yLos) / (1 / zb - 1 / zl);       // vertical projection constant
   const hor = H - C / zb;                             // horizon (usually above the screen)
-  const F = (portrait ? 1.7 : 1.12) * W * zl / FIELD_W; // field width at the line of scrimmage ~ screen width
+  const F = (portrait ? 1.35 : 0.9) * W * zl / FIELD_W; // field width at the line of scrimmage ~ screen width
   const camH = C / F;
   const cy = clamp(this.cam.y, MID_Y - 14, MID_Y + 14);
   this.c3 = { F, hor, camH, C, W, H, camX: this.cam.x - B, camY: this.c3 ? this.c3.camY + (cy - this.c3.camY) * 0.1 : cy };

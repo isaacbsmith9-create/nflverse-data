@@ -2186,11 +2186,11 @@ class LiveGame {
     let fx = b ? b.x : this.cam.x, fy = b ? b.y : this.cam.y, rate = 4;
     if (b && (b.state === 'air' || b.state === 'pitch')) {
       // head straight for where the ball will land so the catch is on screen when it happens
-      fx = b.tx + 3; fy = b.ty; rate = 7.5;
+      fx = b.tx + 3; fy = b.ty; rate = 5.5;
     } else if (b && b.state === 'held' && this.play && (this.play.caught || this.play.int)) {
-      const h = b.holder; fx = h.x + (h.vx || 0) * 0.35; fy = h.y; rate = 7;
+      const h = b.holder; fx = h.x + (h.vx || 0) * 0.35; fy = h.y; rate = 5.2;
     } else if (b && b.state === 'held' && this.phase === 'live' && b.holder !== this.passer) {
-      const h = b.holder; fx = h.x + (h.vx || 0) * 0.3; rate = 6;
+      const h = b.holder; fx = h.x + (h.vx || 0) * 0.3; rate = 5;
     }
     if (this.phase === 'pre' || (this.phase === 'live' && !this.play.thrown && !this.play.caught && this.carrier() === this.passer && this.passReady && !this.play.crossed)) { fx = this.los + 9; rate = 4; }
     const k = 1 - Math.exp(-dt * rate);
@@ -3511,7 +3511,7 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
   const zb = B - 9 - behind, zl = B - 9;
   const C = (H - H * yLos) / (1 / zb - 1 / zl);       // vertical projection constant
   const hor = H - C / zb;                             // horizon (usually above the screen)
-  const F = (portrait ? 1.7 : 1.12) * W * zl / FIELD_W; // field width at the line of scrimmage ~ screen width
+  const F = (portrait ? 1.35 : 0.9) * W * zl / FIELD_W; // field width at the line of scrimmage ~ screen width
   const camH = C / F;
   const cy = clamp(this.cam.y, MID_Y - 14, MID_Y + 14);
   this.c3 = { F, hor, camH, C, W, H, camX: this.cam.x - B, camY: this.c3 ? this.c3.camY + (cy - this.c3.camY) * 0.1 : cy };
@@ -4256,14 +4256,14 @@ LiveGame.prototype.renderGL = function (ctx, W, H) {
   // camera: high, behind the offense, long lens
   const portrait = H > W * 1.05;
   const pocket = this.phase === 'pre' || this.phase === 'call' || (this.phase === 'live' && this.carrier() === this.passer && this.passReady && !this.play.crossed);
-  this.glBack = (this.glBack == null ? 34 : this.glBack) + ((pocket ? 34 : 29) - (this.glBack == null ? 34 : this.glBack)) * 0.06;
+  this.glBack = (this.glBack == null ? 38 : this.glBack) + ((pocket ? 38 : 34) - (this.glBack == null ? 38 : this.glBack)) * 0.06;
   const cy = clamp(this.cam.y, MID_Y - 14, MID_Y + 14);
   const fastCam = this.ball && (this.ball.state === 'air' || this.ball.state === 'pitch' || (this.play && (this.play.caught || this.play.int)));
-  this.glCamY = this.glCamY == null ? cy : this.glCamY + (cy - this.glCamY) * (fastCam ? 0.16 : 0.08);
+  this.glCamY = this.glCamY == null ? cy : this.glCamY + (cy - this.glCamY) * (fastCam ? 0.12 : 0.08);
   const fx = this.cam.x;
-  camera.fov = portrait ? 46 : 30; camera.updateProjectionMatrix();
+  camera.fov = portrait ? 58 : 40; camera.updateProjectionMatrix();
   camera.position.copy(W2T(fx - this.glBack, this.glCamY, this.glBack * 0.72));
-  camera.lookAt(W2T(fx - 4.5, this.glCamY, 0));
+  camera.lookAt(W2T(fx - 3, this.glCamY, 0));
   S.sun.target.position.copy(W2T(fx + 8, this.glCamY, 0)); S.sun.position.copy(W2T(fx - 10, this.glCamY - 30, 70));
   // lines
   const show = ['pre', 'live', 'call', 'kick'].includes(this.phase);

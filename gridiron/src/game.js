@@ -344,11 +344,11 @@ class LiveGame {
     let fx = b ? b.x : this.cam.x, fy = b ? b.y : this.cam.y, rate = 4;
     if (b && (b.state === 'air' || b.state === 'pitch')) {
       // head straight for where the ball will land so the catch is on screen when it happens
-      fx = b.tx + 3; fy = b.ty; rate = 7.5;
+      fx = b.tx + 3; fy = b.ty; rate = 5.5;
     } else if (b && b.state === 'held' && this.play && (this.play.caught || this.play.int)) {
-      const h = b.holder; fx = h.x + (h.vx || 0) * 0.35; fy = h.y; rate = 7;
+      const h = b.holder; fx = h.x + (h.vx || 0) * 0.35; fy = h.y; rate = 5.2;
     } else if (b && b.state === 'held' && this.phase === 'live' && b.holder !== this.passer) {
-      const h = b.holder; fx = h.x + (h.vx || 0) * 0.3; rate = 6;
+      const h = b.holder; fx = h.x + (h.vx || 0) * 0.3; rate = 5;
     }
     if (this.phase === 'pre' || (this.phase === 'live' && !this.play.thrown && !this.play.caught && this.carrier() === this.passer && this.passReady && !this.play.crossed)) { fx = this.los + 9; rate = 4; }
     const k = 1 - Math.exp(-dt * rate);

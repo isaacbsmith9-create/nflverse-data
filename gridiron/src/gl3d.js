@@ -280,14 +280,14 @@ LiveGame.prototype.renderGL = function (ctx, W, H) {
   // camera: high, behind the offense, long lens
   const portrait = H > W * 1.05;
   const pocket = this.phase === 'pre' || this.phase === 'call' || (this.phase === 'live' && this.carrier() === this.passer && this.passReady && !this.play.crossed);
-  this.glBack = (this.glBack == null ? 34 : this.glBack) + ((pocket ? 34 : 29) - (this.glBack == null ? 34 : this.glBack)) * 0.06;
+  this.glBack = (this.glBack == null ? 38 : this.glBack) + ((pocket ? 38 : 34) - (this.glBack == null ? 38 : this.glBack)) * 0.06;
   const cy = clamp(this.cam.y, MID_Y - 14, MID_Y + 14);
   const fastCam = this.ball && (this.ball.state === 'air' || this.ball.state === 'pitch' || (this.play && (this.play.caught || this.play.int)));
-  this.glCamY = this.glCamY == null ? cy : this.glCamY + (cy - this.glCamY) * (fastCam ? 0.16 : 0.08);
+  this.glCamY = this.glCamY == null ? cy : this.glCamY + (cy - this.glCamY) * (fastCam ? 0.12 : 0.08);
   const fx = this.cam.x;
-  camera.fov = portrait ? 46 : 30; camera.updateProjectionMatrix();
+  camera.fov = portrait ? 58 : 40; camera.updateProjectionMatrix();
   camera.position.copy(W2T(fx - this.glBack, this.glCamY, this.glBack * 0.72));
-  camera.lookAt(W2T(fx - 4.5, this.glCamY, 0));
+  camera.lookAt(W2T(fx - 3, this.glCamY, 0));
   S.sun.target.position.copy(W2T(fx + 8, this.glCamY, 0)); S.sun.position.copy(W2T(fx - 10, this.glCamY - 30, 70));
   // lines
   const show = ['pre', 'live', 'call', 'kick'].includes(this.phase);
