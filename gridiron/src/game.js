@@ -81,7 +81,8 @@ function cpuOffCall(gs) {
   if (gs.down === 3 && gs.togo >= 4) passP = 0.9;
   if (gs.quarter >= 4 && gs.clock < 300) passP = trail ? 0.85 : 0.2;
   if (trail && gs.clock < 10 && (gs.quarter === 2 || gs.quarter >= 4) && 100 - gs.yard > 35) return OFF_PLAYS.find(p => p.id === 'hail');
-  const pool = OFF_PLAYS.filter(p => (chance(passP) ? p.type === 'pass' : p.type === 'run') && p.id !== 'hail');
+  const wantPass = chance(passP);
+  const pool = OFF_PLAYS.filter(p => (wantPass ? p.type === 'pass' : p.type === 'run') && p.id !== 'hail' && p.cat !== 'Trick');
   return pick(pool.length ? pool : OFF_PLAYS);
 }
 function cpuDefCall(gs) {
@@ -641,7 +642,7 @@ class LiveGame {
       const op_ = this.openness(r);
       const down = r.x - this.los;
       const need = this.gs.down >= 3 ? (down >= this.gs.togo ? 2 : -2) : 0;
-      const s = Math.min(op_, 6) * 0.9 + Math.min(down, 28) * 0.22 + need + (op.screen && r.role === 'RB' ? 6 : 0) + gauss(0, (100 - qb.r.awr) / 40) - (this.t - (r.cutT || 0) < 0.2 ? 1 : 0);
+      const s = Math.min(op_, 6) * 0.9 + Math.min(down, 28) * 0.22 + need + (op.screen && r.role === 'RB' ? 6 : 0) + (op.hooklat && r.role === 'WR1' ? 5 : 0) + gauss(0, (100 - qb.r.awr) / 40) - (this.t - (r.cutT || 0) < 0.2 ? 1 : 0);
       if (s > bs) { bs = s; best = r; }
       r._open = op_;
     }
@@ -664,7 +665,8 @@ class LiveGame {
     const pl = this.play, qb = this.passer, b = this.ball;
     if (pl.thrown || b.holder !== qb || !this.passReady) return;
     if (!this.eligible.includes(r)) return;
-    const bs = 17 + qb.r.thp * 0.11;
+    const lob = qb === this.ctrl && this.input.sprint;
+    const bs = (17 + qb.r.thp * 0.11) * (lob ? 0.7 : 1);
     let ax = r.x, ay = r.y, T = 0;
     for (let i = 0; i < 4; i++) { const d = Math.hypot(ax - qb.x, ay - qb.y); T = d / bs + 0.12; ax = r.x + r.vx * T; ay = r.y + r.vy * T; }
     const dist = Math.hypot(ax - qb.x, ay - qb.y);
@@ -673,7 +675,7 @@ class LiveGame {
     const err = (1 - qb.r.tha / 105) * 2.3 * (0.4 + dist / 22) * (1 + pressure * 0.9 + qbSpd / 7 * 0.7);
     ax += gauss(0, err * 0.7); ay += gauss(0, err * 0.7);
     if (qb === this.ctrl && Math.abs(this.input.mx) + Math.abs(this.input.my) > 0.3) { ax += clamp(this.input.mx, -1, 1) * 2.8; ay += clamp(this.input.my, -1, 1) * 2.8; } // lead with the stick
-    b.state = 'air'; b.holder = null; b.sx = qb.x; b.sy = qb.y; b.tx = ax; b.ty = ay; b.t = 0; b.T = Math.hypot(ax - qb.x, ay - qb.y) / bs + 0.12; b.h = Math.min(7, dist * 0.13);
+    b.state = 'air'; b.holder = null; b.sx = qb.x; b.sy = qb.y; b.tx = ax; b.ty = ay; b.t = 0; b.T = Math.hypot(ax - qb.x, ay - qb.y) / bs + 0.12; b.h = lob ? Math.min(14, 3 + dist * 0.32) : Math.min(7, dist * 0.13); b.lob = lob;
     pl.thrown = true; pl.target = r; pl.throwX = this.los; pl.tThrow = this.t; pl.passerEnt = qb;
     r.task = { k: 'catch', x: ax, y: ay };
     st(this.gs, qb.p, 'pa'); st(this.gs, r.p, 'tgt');
@@ -698,7 +700,7 @@ class LiveGame {
     let d = null, dd = 1e9;
     for (const e of this.ents) if (e.side === 'D') { const x = Math.hypot(e.x - b.tx, e.y - b.ty); if (x < dd) { dd = x; d = e; } }
     const reach = 1.3 + r.r.cat / 220;
-    const dReach = 1.15 + d.r.cov / 260 + (d.swat > 0 ? 0.7 : 0);
+    const dReach = (1.15 + d.r.cov / 260 + (d.swat > 0 ? 0.7 : 0)) * (b.lob ? 0.7 : 1); // lobs float over underneath defenders
     const oob = b.ty < 0 || b.ty > FIELD_W || b.tx > 120;
     const canC = rd <= reach && !oob, canD = dd <= dReach;
     let out = 'inc';

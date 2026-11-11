@@ -481,6 +481,10 @@ document.addEventListener('click', e => {
     case 'call-play': if (GAME) { $('#playcall').hidden = true; GAME.live.choose(el.dataset.id); } break;
     case 'call-auto': if (GAME) { $('#playcall').hidden = true; const lg = GAME.live; lg.choose(lg.userOnOffense() ? autoOffCall(lg.gs) : cpuDefCall(lg.gs).id); } break;
     case 'offense-only-now': if (GAME) { LEAGUE.settings.simDef = true; save(); $('#simDefBtn').textContent = 'Offense only: On'; $('#playcall').hidden = true; toast('Offense only ON. Turn it off any time in the pause menu.'); GAME.live.next(); } break;
+    case 'audible': if (GAME && GAME.live.phase === 'pre') showPlayCall('off', true); break;
+    case 'hot-open': openHotMenu(); break;
+    case 'hot-set': if (GAME) { GAME.live.setHotRoute(el.dataset.role, el.dataset.route); openHotMenu(); } break;
+    case 'hot-close': $('#hotMenu').hidden = true; if (GAME) GAME.paused = false; break;
     case 'sim-drive': if (GAME) { $('#playcall').hidden = true; simDrive(GAME.live.gs); GAME.live.h.update(); GAME.live.next(); } break;
     case 'game-continue': endLiveGame(); break;
   }
@@ -517,7 +521,7 @@ function afterAdvance() {
 function howTo() {
   modal(`<div class="modal-head"><h2>How to play</h2><button class="btn sm ghost x" data-act="close">✕</button></div>
   <div class="cols small">
-    <div><div class="eyebrow">Keyboard (Chromebook)</div><p><kbd>W A S D</kbd> / arrows — move<br><kbd>Shift</kbd> — sprint<br><kbd>Space</kbd> — snap · juke (ball carrier) · dive tackle (defense) · kick<br><kbd>1</kbd>–<kbd>5</kbd> — throw to that receiver<br><kbd>T</kbd> — throw it away<br><kbd>E</kbd> — switch defender<br><kbd>Esc</kbd> — pause</p></div>
+    <div><div class="eyebrow">Keyboard (Chromebook)</div><p><kbd>W A S D</kbd> / arrows — move<br><kbd>Shift</kbd> — sprint<br><kbd>Space</kbd> — snap · juke (ball carrier) · dive tackle (defense) · kick<br><kbd>1</kbd>–<kbd>5</kbd> — throw to that receiver (hold <kbd>Shift</kbd> to lob it)<br><kbd>P</kbd> — audible · <kbd>H</kbd> — hot routes (before the snap)<br><kbd>T</kbd> — throw it away<br><kbd>E</kbd> — switch defender<br><kbd>Esc</kbd> — pause</p></div>
     <div><div class="eyebrow">Touch (phone)</div><p>Left half: drag to move.<br>SNAP / ACTION — snap, juke, dive, kick.<br>Tap a receiver (or the colored buttons) to throw.<br>SPRINT — hold to run faster.<br>SWITCH — change defender.</p></div>
     <div><div class="eyebrow">Tips</div><p>Hold the ball too long and you'll get sacked. Man coverage loses to crossing routes; zones leave holes between defenders. If you let go of the stick, your ball carrier keeps running on his own. On defense, your player plays his assignment until you move him.</p></div>
     <div><div class="eyebrow">Franchise</div><p>17-game season (the real 18-week 2026 schedule in the NFL league), 14-team playoffs, then an offseason: progression and retirements, re-signing, three days of free agency and a 7-round draft. Watch the salary cap.</p></div>
@@ -576,7 +580,7 @@ function updateHUD() {
   $('#scorebug').innerHTML = `${sbt(1)}<div class="sb-mid"><div class="clk">${q} ${fmtClock(clock)}</div><div class="dd">${downStr(gs)} · ${yardStr(gs)}</div></div>${sbt(0)}`;
   // hint + action button label
   const ph = lg.phase; let hint = '', act = 'Action';
-  if (ph === 'pre') { if (lg.userOnOffense()) { hint = touchMode ? 'Tap SNAP to start the play' : 'Press SPACE to snap'; act = 'Snap'; } else { hint = touchMode ? 'SWITCH picks your defender' : 'E switches your defender · play starts automatically'; act = 'Dive'; } }
+  if (ph === 'pre') { if (lg.userOnOffense()) { hint = touchMode ? 'Tap SNAP to start the play · AUDIBLE / HOT ROUTE up top' : 'SPACE to snap · P audible · H hot route · hold SHIFT when throwing to lob'; act = 'Snap'; } else { hint = touchMode ? 'SWITCH picks your defender' : 'E switches your defender · play starts automatically'; act = 'Dive'; } }
   else if (ph === 'live') {
     const c = lg.carrier();
     const sh = lg.scriptHint && lg.scriptHint();
@@ -588,6 +592,7 @@ function updateHUD() {
   } else if (ph === 'kick') { hint = ''; act = 'Kick'; }
   else if (ph === 'post') act = 'Next';
   const h = $('#hint'); h.hidden = !hint; h.textContent = hint;
+  $('#preBtns').hidden = !(ph === 'pre' && lg.userOnOffense() && $('#playcall').hidden && $('#hotMenu').hidden);
   $('#tbAct').textContent = act;
   $('#tbSwitch').textContent = lg.userOnOffense() && ph === 'live' ? (lg.canUserThrow() ? 'Throw away' : lg.carrier() === lg.ctrl && lg.ctrl && lg.ctrl.role === 'QB' && lg.play.crossed ? 'Slide' : 'Switch') : 'Switch';
   // receiver buttons
@@ -646,7 +651,7 @@ function playSVG(play, kind) {
   return s + '</svg>';
 }
 
-function showPlayCall(mode) {
+function showPlayCall(mode, audible) {
   const lg = GAME.live, gs = lg.gs, L = LEAGUE;
   const el = $('#playcall');
   const sit = `${downStr(gs)} · ${yardStr(gs)} · ${gs.quarter <= 4 ? 'Q' + gs.quarter : 'OT'} ${fmtClock(gs.clock)}`;
@@ -664,7 +669,7 @@ function showPlayCall(mode) {
   } else {
     cards = DEF_PLAYS.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'def')}<span class="tag">Defense</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('');
   }
-  el.innerHTML = `<div class="pc-inner wrap"><div class="pc-head"><h2>${mode === 'off' ? 'Call your play' : 'Call your defense'}</h2><span class="pill amber">${sit}</span><span class="grow"></span>
+  el.innerHTML = `<div class="pc-inner wrap"><div class="pc-head"><h2>${audible ? 'Audible' : mode === 'off' ? 'Call your play' : 'Call your defense'}</h2><span class="pill amber">${sit}</span><span class="grow"></span>
     <button class="btn sm" data-act="call-auto">Ask coach</button><button class="btn sm" data-act="sim-drive">Sim this drive</button>${mode === 'def' ? '<button class="btn sm primary" data-act="offense-only-now">Offense only from now on</button>' : ''}<button class="btn sm ghost" data-act="sim-game-rest">Sim rest of game</button></div>
     <div class="plays">${cards}</div></div>`;
   el.hidden = false;
@@ -743,6 +748,8 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Space' || e.code === 'Enter') inp.actionEdge = true;
   if (e.code === 'KeyE' || e.code === 'KeyQ') inp.sw = true;
   if (e.code === 'KeyT') inp.throwAway = true;
+  if (e.code === 'KeyP' && lg.phase === 'pre' && lg.userOnOffense()) { showPlayCall('off', true); return; }
+  if (e.code === 'KeyH' && lg.phase === 'pre' && lg.userOnOffense()) { openHotMenu(); return; }
   const m = /^(Digit|Numpad)([1-5])$/.exec(e.code);
   if (m && lg.eligible) inp.throwTo = lg.eligible[+m[2] - 1] || null;
 });
@@ -790,3 +797,19 @@ function applyTouch() {
 // ---------- boot ----------
 function boot() { renderMenu(); }
 boot();
+
+// ---------- hot route menu ----------
+function openHotMenu() {
+  if (!GAME) return; const lg = GAME.live, el = $('#hotMenu');
+  if (lg.phase !== 'pre' || !lg.userOnOffense()) return;
+  if (!lg.canAdjust()) { toast('Hot routes work on pass plays and RPOs. Use Audible to change the play.'); return; }
+  GAME.paused = true;
+  const roles = ['WR1', 'WR2', 'WR3', 'TE', 'RB'];
+  const rows = roles.map(r => {
+    const e = lg.O[r]; const cur = e.task.k === 'route' ? e.task.name : 'block'; const idx = lg.eligible.indexOf(e);
+    return `<div class="card hot-row"><div class="row"><span class="hot-num" style="background:${idx >= 0 ? RCOL[idx] : '#555'}">${idx >= 0 ? idx + 1 : '–'}</span><b>${r.replace(/[0-9]/, '')}</b> ${esc(pshort(e.p))} <span class="muted small">#${e.p.num}</span></div>
+      <div class="row" style="gap:6px;margin-top:8px">${HOT_ROUTES.map(([k, n]) => `<button class="btn sm ${cur === k ? 'primary' : ''}" data-act="hot-set" data-role="${r}" data-route="${k}">${n}</button>`).join('')}</div></div>`;
+  }).join('');
+  el.innerHTML = `<div class="pc-inner wrap"><div class="pc-head"><h2>Hot routes</h2><span class="muted">${esc(lg.offPlay.name)}</span><span class="grow"></span><button class="btn primary" data-act="hot-close">Done</button></div>${rows}</div>`;
+  el.hidden = false;
+}
