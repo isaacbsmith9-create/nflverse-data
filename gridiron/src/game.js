@@ -497,7 +497,7 @@ class LiveGame {
   }
 
   aiRoute(e, tk, dt) {
-    if (this.offPlay.screen && e.role === 'RB' && this.t < 1.0) return this.aiPassBlock(e, dt);
+    if (this.offPlay.screen && e.role === (this.offPlay.screenTo || 'RB') && this.t < (this.offPlay.screenTo ? 0.4 : 1.0)) return this.offPlay.screenTo ? this.steer(e, e.x, e.y, 0.2, dt) : this.aiPassBlock(e, dt);
     if (this.t < (this.offPlay.pa && e.role !== 'WR1' && e.role !== 'WR2' ? 0.4 : 0)) return;
     if (tk.i >= tk.pts.length) {
       const last = tk.pts[tk.pts.length - 1];
@@ -630,7 +630,7 @@ class LiveGame {
   aiQB(dt) {
     const pl = this.play, qb = this.passer, op = this.offPlay;
     if (pl.thrown || pl.crossed || this.qbScramble) return;
-    let drop = (op.form === 'single' ? 1.3 : 0.95) + (op.pa ? 0.5 : 0) + (op.screen ? 0.6 : 0);
+    let drop = (op.form === 'single' ? 1.3 : 0.95) + (op.pa ? 0.5 : 0) + (op.screen && !op.screenTo ? 0.6 : 0);
     if (this.passReadyAt != null) drop = this.passReadyAt + (op.quick ? 0.15 : 0.45);
     if (this.t < drop) return;
     pl.readT = (pl.readT || 0) + dt;
@@ -642,7 +642,7 @@ class LiveGame {
       const op_ = this.openness(r);
       const down = r.x - this.los;
       const need = this.gs.down >= 3 ? (down >= this.gs.togo ? 2 : -2) : 0;
-      const s = Math.min(op_, 6) * 0.9 + Math.min(down, 28) * 0.22 + need + (op.screen && r.role === 'RB' ? 6 : 0) + (op.hooklat && r.role === 'WR1' ? 5 : 0) + gauss(0, (100 - qb.r.awr) / 40) - (this.t - (r.cutT || 0) < 0.2 ? 1 : 0);
+      const s = Math.min(op_, 6) * 0.9 + Math.min(down, 28) * 0.22 + need + (op.screen && r.role === (op.screenTo || 'RB') ? 6 : 0) + (op.hooklat && r.role === 'WR1' ? 5 : 0) + gauss(0, (100 - qb.r.awr) / 40) - (this.t - (r.cutT || 0) < 0.2 ? 1 : 0);
       if (s > bs) { bs = s; best = r; }
       r._open = op_;
     }

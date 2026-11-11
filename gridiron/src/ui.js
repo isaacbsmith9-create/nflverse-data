@@ -481,6 +481,7 @@ document.addEventListener('click', e => {
     case 'call-play': if (GAME) { $('#playcall').hidden = true; GAME.live.choose(el.dataset.id); } break;
     case 'call-auto': if (GAME) { $('#playcall').hidden = true; const lg = GAME.live; lg.choose(lg.userOnOffense() ? autoOffCall(lg.gs) : cpuDefCall(lg.gs).id); } break;
     case 'offense-only-now': if (GAME) { LEAGUE.settings.simDef = true; save(); $('#simDefBtn').textContent = 'Offense only: On'; $('#playcall').hidden = true; toast('Offense only ON. Turn it off any time in the pause menu.'); GAME.live.next(); } break;
+    case 'pc-tab': PC_TAB = el.dataset.cat; $$('#playcall .pc-sec').forEach(s => s.hidden = PC_TAB !== 'All' && s.dataset.cat !== PC_TAB); $$('#playcall .pc-tabs .tab').forEach(b => b.classList.toggle('on', b.dataset.cat === PC_TAB)); $('#playcall').scrollTop = 0; break;
     case 'audible': if (GAME && GAME.live.phase === 'pre') showPlayCall('off', true); break;
     case 'hot-open': openHotMenu(); break;
     case 'hot-set': if (GAME) { GAME.live.setHotRoute(el.dataset.role, el.dataset.route); openHotMenu(); } break;
@@ -651,6 +652,7 @@ function playSVG(play, kind) {
   return s + '</svg>';
 }
 
+let PC_TAB = 'All';
 function showPlayCall(mode, audible) {
   const lg = GAME.live, gs = lg.gs, L = LEAGUE;
   const el = $('#playcall');
@@ -662,15 +664,18 @@ function showPlayCall(mode, audible) {
     if (gs.down === 4 || (gs.clock < 30 && (gs.quarter === 2 || gs.quarter >= 4))) {
       if (fp > 0.02) specials.push(`<button class="play special" data-act="call-play" data-id="fg"><span class="tag">Special teams</span><span class="pn">Field Goal</span><span class="pd">${dist} yds · ~${Math.round(fp * 100)}% for ${esc(pshort(k))}</span></button>`);
       if (gs.down === 4) specials.push(`<button class="play special" data-act="call-play" data-id="punt"><span class="tag">Special teams</span><span class="pn">Punt</span><span class="pd">Flip the field.</span></button>`);
+      if (gs.down === 4) specials.push(`<button class="play special" data-act="call-play" data-id="fakepunt"><span class="tag">Fake</span><span class="pn">Fake Punt</span><span class="pd">They set up to return it. Run it instead.</span></button>`);
+      if (gs.down === 4 && fp > 0.02) specials.push(`<button class="play special" data-act="call-play" data-id="fakefg"><span class="tag">Fake</span><span class="pn">Fake Field Goal</span><span class="pd">The holder pops up and throws.</span></button>`);
     }
     if (gs.score[gs.poss] > gs.score[1 - gs.poss] && gs.quarter >= 4 && gs.clock < 150) specials.push(`<button class="play special" data-act="call-play" data-id="kneel"><span class="tag">Clock</span><span class="pn">QB Kneel</span><span class="pd">Run out the clock.</span></button>`);
     const cats = ['Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
-    cards = specials.join('') + cats.map(c => { const ps = OFF_PLAYS.filter(p => (p.cat || 'Pass') === c); if (!ps.length) return ''; return `<h3 class="pc-cat">${c === 'Trick' ? 'Trick plays' : c === 'RPO' ? 'RPOs' : c}</h3>` + ps.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'off')}<span class="tag">${c}</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join(''); }).join('');
+    cards = specials.join('') + cats.map(c => { const ps = OFF_PLAYS.filter(p => (p.cat || 'Pass') === c); if (!ps.length) return ''; return `<div class="pc-sec" data-cat="${c}" ${PC_TAB !== 'All' && PC_TAB !== c ? 'hidden' : ''}><h3 class="pc-cat">${c === 'Trick' ? 'Trick plays' : c === 'RPO' ? 'RPOs' : c} <span class="muted small">${ps.length}</span></h3>` + ps.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'off')}<span class="tag">${c}</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('') + '</div>'; }).join('');
   } else {
     cards = DEF_PLAYS.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'def')}<span class="tag">Defense</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('');
   }
   el.innerHTML = `<div class="pc-inner wrap"><div class="pc-head"><h2>${audible ? 'Audible' : mode === 'off' ? 'Call your play' : 'Call your defense'}</h2><span class="pill amber">${sit}</span><span class="grow"></span>
     <button class="btn sm" data-act="call-auto">Ask coach</button><button class="btn sm" data-act="sim-drive">Sim this drive</button>${mode === 'def' ? '<button class="btn sm primary" data-act="offense-only-now">Offense only from now on</button>' : ''}<button class="btn sm ghost" data-act="sim-game-rest">Sim rest of game</button></div>
+    ${mode === 'off' ? `<div class="pc-tabs">${['All', 'Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'].map(t => `<button class="tab ${PC_TAB === t ? 'on' : ''}" data-act="pc-tab" data-cat="${t}">${t === 'Trick' ? 'Trick plays' : t}</button>`).join('')}</div>` : ''}
     <div class="plays">${cards}</div></div>`;
   el.hidden = false;
 }

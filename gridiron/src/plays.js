@@ -71,7 +71,7 @@ LG.setup = function () {
   this.qbRunMode = false; this.readKey = null; this.qbPts = null;
   const op = this.offPlay, O = this.O;
   if (!SCRIPT_TYPES.includes(op.type)) return;
-  this.runBlocking = !(op.type === 'trick' && (op.toss || op.lateralTo)) && !(op.type === 'qbrun' && op.delay);
+  this.runBlocking = !(op.type === 'trick' && (op.toss || op.lateralTo || op.passPro)) && !(op.type === 'qbrun' && op.delay);
   for (const e of O.OL) e.task = { k: this.runBlocking ? 'rblock' : 'pblock', assign: e.task.assign };
   for (const k of ['WR1', 'WR2', 'WR3', 'TE', 'RB']) {
     const e = O[k], rt = op.routes[k];
@@ -81,7 +81,7 @@ LG.setup = function () {
     else e.task = { k: this.runBlocking ? 'block' : 'pblock' };
   }
   this.eligible = ['WR1', 'WR2', 'WR3', 'TE', 'RB'].filter(k => O[k].task.k === 'route').map(k => O[k]);
-  if (op.id === 'endaround') { const w = O.WR3; w.x = this.los - 2.5; w.y = clamp(this.gs.ballY - 5, 2, FIELD_W - 2); w.task = { k: 'path', pts: pathFrom(w.x, w.y, op.carrierPath), i: 0 }; }
+  if (op.id === 'endaround' || op.jet) { const w = O.WR3; w.x = this.los - 2.5; w.y = clamp(this.gs.ballY - 5, 2, FIELD_W - 2); w.task = { k: 'path', pts: pathFrom(w.x, w.y, op.carrierPath), i: 0 }; }
   if (op.qbPath) this.qbPts = pathFrom(O.QB.x, O.QB.y, op.qbPath);
   if (op.type === 'qbrun' || op.type === 'speedopt') { this.qbRunMode = true; O.QB.task = { k: 'path', pts: this.qbPts, i: 0, delay: op.delay || 0 }; }
   this.passer = O.QB; this.passReady = op.type === 'rpo'; this.passReadyAt = op.type === 'rpo' ? 0.2 : null;
@@ -147,14 +147,14 @@ LG.scriptStep = function (dt) {
         if (userQB && inp.actionEdge && this.t > 0.08) { inp.actionEdge = false; this.optKeep(); }
         else if (!userQB && this.t > 0.5) {
           const crash = this.readKey && (this.readKey.readMode === 'crash' || this.dist(this.readKey, O.RB) < 2.5);
-          (crash ? chance(0.7 + O.QB.r.awr / 400) : chance(0.12)) ? this.optKeep() : this.optGive();
+          ((crash !== !!op.invert) ? chance(0.7 + O.QB.r.awr / 400) : chance(0.12)) ? this.optKeep() : this.optGive();
         } else if (this.t > 0.75) this.optGive();
       }
       break;
     case 'speedopt':
       if (!pl.pitched && car === O.QB) {
         const rk = this.readKey;
-        if ((userQB && inp.actionEdge) || (!userQB && this.t > 0.45 && rk && this.dist(rk, O.QB) < 3.3 && O.RB.x > O.QB.x - 1.8)) {
+        if ((userQB && inp.actionEdge) || (!userQB && this.t > 0.45 && rk && this.dist(rk, O.QB) < 3.3 && O.RB.x > O.QB.x - 3.2)) {
           inp.actionEdge = false; pl.pitched = true; this.pitch(O.QB, O.RB);
         }
       }
@@ -181,15 +181,16 @@ LG.scriptStep = function (dt) {
     case 'trick':
       if (op.handTo && !pl.handoff && car === O.QB) {
         const tgt = O[op.handTo];
-        if ((this.t > 0.25 && this.dist(O.QB, tgt) < 1.6) || this.t > 1.4) {
+        if ((this.t > (op.handAt || 0.25) && this.dist(O.QB, tgt) < 1.6) || this.t > Math.max(1.4, (op.handAt || 0) + 0.5)) {
           b.holder = tgt; pl.handoff = true; this.readAll(this.t, 'run');
-          if (op.flea) for (const d of this.ents) if (d.side === 'D' && (d.role.startsWith('CB') || d.role.startsWith('S')) && chance(0.25 + d.r.awr / 140)) d.read += 2.2; // smart DBs stay home
+          if (op.handPass) { this.passer = tgt; this.passReady = true; this.passReadyAt = this.t + 0.35; }
+          if (op.flea || op.handPass) for (const d of this.ents) if (d.side === 'D' && (d.role.startsWith('CB') || d.role.startsWith('S')) && chance(0.25 + d.r.awr / 140)) d.read += 2.2; // smart DBs stay home
           if (this.userOnOffense()) this.ctrl = tgt;
         }
       }
       if (op.toss && !pl.tossed && this.t > 0.3 && car === O.QB) { pl.tossed = true; this.pitch(O.QB, O.RB); }
       if (op.flea && pl.handoff && !pl.pitched2 && car === O.RB && this.t > op.pitchBackAt) { pl.pitched2 = true; this.pitch(O.RB, O.QB); }
-      if (op.lateralTo && !pl.lat && this.t > op.latAt && car === O.QB) { pl.lat = true; this.pitch(O.QB, O[op.lateralTo]); }
+      if (op.lateralTo && !pl.lat && this.t > op.latAt && car === O[op.latFrom || 'QB']) { pl.lat = true; this.pitch(car, O[op.lateralTo]); }
       break;
   }
 };

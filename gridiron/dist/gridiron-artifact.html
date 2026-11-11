@@ -265,6 +265,9 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
 .hot-row { padding: 12px; }
 .hot-num { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #111; font: 800 15px/1 var(--f-display); }
 
+.pc-sec { display: contents; }
+.pc-tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: rgba(5,12,9,.95); z-index: 2; }
+
 </style>
 <section id="menu" class="screen">
   <div class="menu-inner wrap">
@@ -2213,7 +2216,7 @@ class LiveGame {
   }
 
   aiRoute(e, tk, dt) {
-    if (this.offPlay.screen && e.role === 'RB' && this.t < 1.0) return this.aiPassBlock(e, dt);
+    if (this.offPlay.screen && e.role === (this.offPlay.screenTo || 'RB') && this.t < (this.offPlay.screenTo ? 0.4 : 1.0)) return this.offPlay.screenTo ? this.steer(e, e.x, e.y, 0.2, dt) : this.aiPassBlock(e, dt);
     if (this.t < (this.offPlay.pa && e.role !== 'WR1' && e.role !== 'WR2' ? 0.4 : 0)) return;
     if (tk.i >= tk.pts.length) {
       const last = tk.pts[tk.pts.length - 1];
@@ -2346,7 +2349,7 @@ class LiveGame {
   aiQB(dt) {
     const pl = this.play, qb = this.passer, op = this.offPlay;
     if (pl.thrown || pl.crossed || this.qbScramble) return;
-    let drop = (op.form === 'single' ? 1.3 : 0.95) + (op.pa ? 0.5 : 0) + (op.screen ? 0.6 : 0);
+    let drop = (op.form === 'single' ? 1.3 : 0.95) + (op.pa ? 0.5 : 0) + (op.screen && !op.screenTo ? 0.6 : 0);
     if (this.passReadyAt != null) drop = this.passReadyAt + (op.quick ? 0.15 : 0.45);
     if (this.t < drop) return;
     pl.readT = (pl.readT || 0) + dt;
@@ -2358,7 +2361,7 @@ class LiveGame {
       const op_ = this.openness(r);
       const down = r.x - this.los;
       const need = this.gs.down >= 3 ? (down >= this.gs.togo ? 2 : -2) : 0;
-      const s = Math.min(op_, 6) * 0.9 + Math.min(down, 28) * 0.22 + need + (op.screen && r.role === 'RB' ? 6 : 0) + (op.hooklat && r.role === 'WR1' ? 5 : 0) + gauss(0, (100 - qb.r.awr) / 40) - (this.t - (r.cutT || 0) < 0.2 ? 1 : 0);
+      const s = Math.min(op_, 6) * 0.9 + Math.min(down, 28) * 0.22 + need + (op.screen && r.role === (op.screenTo || 'RB') ? 6 : 0) + (op.hooklat && r.role === 'WR1' ? 5 : 0) + gauss(0, (100 - qb.r.awr) / 40) - (this.t - (r.cutT || 0) < 0.2 ? 1 : 0);
       if (s > bs) { bs = s; best = r; }
       r._open = op_;
     }
@@ -2830,7 +2833,7 @@ LG.setup = function () {
   this.qbRunMode = false; this.readKey = null; this.qbPts = null;
   const op = this.offPlay, O = this.O;
   if (!SCRIPT_TYPES.includes(op.type)) return;
-  this.runBlocking = !(op.type === 'trick' && (op.toss || op.lateralTo)) && !(op.type === 'qbrun' && op.delay);
+  this.runBlocking = !(op.type === 'trick' && (op.toss || op.lateralTo || op.passPro)) && !(op.type === 'qbrun' && op.delay);
   for (const e of O.OL) e.task = { k: this.runBlocking ? 'rblock' : 'pblock', assign: e.task.assign };
   for (const k of ['WR1', 'WR2', 'WR3', 'TE', 'RB']) {
     const e = O[k], rt = op.routes[k];
@@ -2840,7 +2843,7 @@ LG.setup = function () {
     else e.task = { k: this.runBlocking ? 'block' : 'pblock' };
   }
   this.eligible = ['WR1', 'WR2', 'WR3', 'TE', 'RB'].filter(k => O[k].task.k === 'route').map(k => O[k]);
-  if (op.id === 'endaround') { const w = O.WR3; w.x = this.los - 2.5; w.y = clamp(this.gs.ballY - 5, 2, FIELD_W - 2); w.task = { k: 'path', pts: pathFrom(w.x, w.y, op.carrierPath), i: 0 }; }
+  if (op.id === 'endaround' || op.jet) { const w = O.WR3; w.x = this.los - 2.5; w.y = clamp(this.gs.ballY - 5, 2, FIELD_W - 2); w.task = { k: 'path', pts: pathFrom(w.x, w.y, op.carrierPath), i: 0 }; }
   if (op.qbPath) this.qbPts = pathFrom(O.QB.x, O.QB.y, op.qbPath);
   if (op.type === 'qbrun' || op.type === 'speedopt') { this.qbRunMode = true; O.QB.task = { k: 'path', pts: this.qbPts, i: 0, delay: op.delay || 0 }; }
   this.passer = O.QB; this.passReady = op.type === 'rpo'; this.passReadyAt = op.type === 'rpo' ? 0.2 : null;
@@ -2906,14 +2909,14 @@ LG.scriptStep = function (dt) {
         if (userQB && inp.actionEdge && this.t > 0.08) { inp.actionEdge = false; this.optKeep(); }
         else if (!userQB && this.t > 0.5) {
           const crash = this.readKey && (this.readKey.readMode === 'crash' || this.dist(this.readKey, O.RB) < 2.5);
-          (crash ? chance(0.7 + O.QB.r.awr / 400) : chance(0.12)) ? this.optKeep() : this.optGive();
+          ((crash !== !!op.invert) ? chance(0.7 + O.QB.r.awr / 400) : chance(0.12)) ? this.optKeep() : this.optGive();
         } else if (this.t > 0.75) this.optGive();
       }
       break;
     case 'speedopt':
       if (!pl.pitched && car === O.QB) {
         const rk = this.readKey;
-        if ((userQB && inp.actionEdge) || (!userQB && this.t > 0.45 && rk && this.dist(rk, O.QB) < 3.3 && O.RB.x > O.QB.x - 1.8)) {
+        if ((userQB && inp.actionEdge) || (!userQB && this.t > 0.45 && rk && this.dist(rk, O.QB) < 3.3 && O.RB.x > O.QB.x - 3.2)) {
           inp.actionEdge = false; pl.pitched = true; this.pitch(O.QB, O.RB);
         }
       }
@@ -2940,15 +2943,16 @@ LG.scriptStep = function (dt) {
     case 'trick':
       if (op.handTo && !pl.handoff && car === O.QB) {
         const tgt = O[op.handTo];
-        if ((this.t > 0.25 && this.dist(O.QB, tgt) < 1.6) || this.t > 1.4) {
+        if ((this.t > (op.handAt || 0.25) && this.dist(O.QB, tgt) < 1.6) || this.t > Math.max(1.4, (op.handAt || 0) + 0.5)) {
           b.holder = tgt; pl.handoff = true; this.readAll(this.t, 'run');
-          if (op.flea) for (const d of this.ents) if (d.side === 'D' && (d.role.startsWith('CB') || d.role.startsWith('S')) && chance(0.25 + d.r.awr / 140)) d.read += 2.2; // smart DBs stay home
+          if (op.handPass) { this.passer = tgt; this.passReady = true; this.passReadyAt = this.t + 0.35; }
+          if (op.flea || op.handPass) for (const d of this.ents) if (d.side === 'D' && (d.role.startsWith('CB') || d.role.startsWith('S')) && chance(0.25 + d.r.awr / 140)) d.read += 2.2; // smart DBs stay home
           if (this.userOnOffense()) this.ctrl = tgt;
         }
       }
       if (op.toss && !pl.tossed && this.t > 0.3 && car === O.QB) { pl.tossed = true; this.pitch(O.QB, O.RB); }
       if (op.flea && pl.handoff && !pl.pitched2 && car === O.RB && this.t > op.pitchBackAt) { pl.pitched2 = true; this.pitch(O.RB, O.QB); }
-      if (op.lateralTo && !pl.lat && this.t > op.latAt && car === O.QB) { pl.lat = true; this.pitch(O.QB, O[op.lateralTo]); }
+      if (op.lateralTo && !pl.lat && this.t > op.latAt && car === O[op.latFrom || 'QB']) { pl.lat = true; this.pitch(car, O[op.lateralTo]); }
       break;
   }
 };
@@ -3053,7 +3057,9 @@ LX.setup = function () {
     const rb = O[op.directSnap];
     this.ball.holder = rb; this.passer = rb; this.passReady = false; this.passReadyAt = null;
     if (op.routes.QB) { O.QB.task = { k: 'route', name: op.routes.QB, pts: this.routePts(op.routes.QB, O.QB.x, O.QB.y, by), i: 0 }; this.eligible.push(O.QB); }
-    for (const e of O.OL) e.task = { k: 'pblock', assign: e.task.assign };
+    for (const e of O.OL) e.task = { k: op.directNoPass ? 'rblock' : 'pblock', assign: e.task.assign };
+    if (op.directNoPass) this.runBlocking = true;
+    if (op.latFrom && O[op.lateralTo]) O[op.lateralTo].task = { k: 'hold' };
     if (this.userOnOffense()) this.ctrl = rb;
   }
 };
@@ -3069,7 +3075,7 @@ LX.scriptStep = function (dt) {
       pl.readSet = true; pl.handoff = true;
       for (const d of this.ents) if (d.side === 'D' && (d.role.startsWith('DL') || d.role.startsWith('LB'))) d.read = Math.min(d.read, this.t + d.react);
     }
-    if (!this.passReady && !pl.thrown && this.t > 0.75 && car === this.passer) {
+    if (!op.directNoPass && !this.passReady && !pl.thrown && this.t > 0.75 && car === this.passer) {
       this.passReady = true; this.passReadyAt = this.t;
       // the most alert defender nearby picks up the leaking QB
       const qb = O.QB; const cover = this.ents.filter(d => d.side === 'D' && !d.eng).sort((a, b) => (this.dist(a, qb) - a.r.awr / 10) - (this.dist(b, qb) - b.r.awr / 10))[0];
@@ -3124,6 +3130,112 @@ LX.ai = function (e, dt) {
     return this.steer(e, w.x - 3, w.y + inward * 2.5, 1, dt);
   }
   return _aiX.call(this, e, dt);
+};
+
+// ============================================================
+// Gridiron Dynasty - big playbook expansion: new formations,
+// routes and ~40 more plays across every category.
+// ============================================================
+'use strict';
+
+Object.assign(FORMS, {
+  pistol: { QB: [-4, 0], RB: [-6.6, 0], WR1: [-1, -19], WR2: [-1, 18.5], WR3: [-1.6, -10], TE: [-1.3, 4.3] },
+  empty:  { QB: [-5, 0], RB: [-1.4, 10.5], WR1: [-1, -19], WR2: [-1, 18.5], WR3: [-1.6, -10], TE: [-1.3, 4.3] },
+  bunch:  { QB: [-5, 0], RB: [-5, 2.2], WR1: [-1, -12.5], WR2: [-1, 18.5], WR3: [-2.1, -10.8], TE: [-2.3, -14.3] },
+  iform:  { QB: [-1.4, 0], RB: [-7.6, 0], WR1: [-1, -19], WR2: [-1, 18.5], WR3: [-1, 12], TE: [-1.3, 4.3] },
+  tight:  { QB: [-1.4, 0], RB: [-6.8, 0], WR1: [-1, -8.5], WR2: [-1, 8.5], WR3: [-1.3, -4.3], TE: [-1.3, 4.3] },
+});
+
+Object.assign(ROUTES, {
+  sluggo: [[2, 0], [3, 3], [30, -1]],          // slant-and-go
+  outup: [[6, 0], [0.5, -3], [28, 0]],         // out-and-up
+  fade: [[3, -1.5], [30, -3]],
+  spot: [[5, 2, 's']],
+  cross: [[7, 0], [6, 22]],
+  swing: [[-1.5, -3], [1, -6], [5, -6]],
+  angle: [[2, -3], [3, 5], [6, 3]],
+  whip: [[4, 4], [-0.5, -5, 's']],
+  stick: [[5, 0], [0, 1.5, 's']],
+  sail: [[10, 0], [8, -10]],
+  deepdig: [[16, 0], [0.5, 16]],
+  wrscreen: [[-1.5, 2, 's']],
+});
+
+const MORE_PLAYS = [
+  // ---- runs ----
+  { id: 'powero', name: 'Power O', type: 'run', cat: 'Run', form: 'iform', path: [[1, 1], [3, 3], [10, 3.5]], desc: 'Downhill power off right tackle from the I.' },
+  { id: 'izone', name: 'Inside Zone', type: 'run', cat: 'Run', form: 'gun', path: [[0.5, 1], [2, 0.5], [10, 0]], desc: 'Press the line, find the crease, cut.' },
+  { id: 'ozone', name: 'Outside Zone', type: 'run', cat: 'Run', form: 'single', path: [[1, 4], [1.5, 7], [10, 9]], desc: 'Stretch it wide, one cut and go.' },
+  { id: 'trap', name: 'Trap', type: 'run', cat: 'Run', form: 'single', path: [[1.5, -1], [3, -1], [10, -1]], desc: 'Let the DT in, trap him, hit the hole.' },
+  { id: 'pistoliso', name: 'Pistol Iso', type: 'run', cat: 'Run', form: 'pistol', path: [[1.5, 0.6], [4, 0.8], [10, 0.8]], desc: 'Straight downhill from the pistol.' },
+  { id: 'istretch', name: 'I-Form Stretch', type: 'run', cat: 'Run', form: 'iform', path: [[0, 4], [1, 8], [12, 10]], desc: 'Get to the edge behind the fullback.' },
+  { id: 'counterTrey', name: 'Counter Trey', type: 'run', cat: 'Run', form: 'pistol', path: [[0, -1.5], [1.5, 2.5], [3, 5], [12, 6]], desc: 'Step left, pulling guards lead it right.' },
+  { id: 'tossleft', name: 'Toss Left', type: 'run', cat: 'Run', form: 'single', toss: true, path: [[1.4, -3], [3, -6.5], [20, -7]], desc: 'Pitch to the short side.' },
+  { id: 'gldive', name: 'Goal Line Dive', type: 'run', cat: 'Run', form: 'tight', path: [[1.2, 0.8], [4, 0.8]], desc: 'Heavy set, push the pile.' },
+  { id: 'jetsweep', name: 'Jet Sweep', type: 'trick', cat: 'Run', form: 'gun', handTo: 'WR3', jet: true,
+    carrierPath: [[-2.2, 4.5], [1.5, 5], [4, 3], [18, 2]], path: [[1, 1], [4, 1]], desc: 'Slot in jet motion takes it on the move.' },
+  // ---- option ----
+  { id: 'pistolread', name: 'Pistol Read', type: 'option', cat: 'Option', form: 'pistol', read: 'DL4',
+    path: [[1, -1.5], [2, -3], [9, -4]], qbPath: [[1, 1.8], [3, 3.2], [12, 3]], desc: 'Zone read from the pistol.' },
+  { id: 'invveer', name: 'Inverted Veer', type: 'option', cat: 'Option', form: 'gun', read: 'DL4', invert: true,
+    path: [[0.5, 3], [2, 7], [12, 9]], qbPath: [[1.5, -0.8], [3, -1.2], [10, -1.5]], desc: 'RB sweeps outside, QB keeps inside. End widens, you keep.' },
+  // ---- QB runs ----
+  { id: 'qbcounter', name: 'QB Counter', type: 'qbrun', cat: 'QB Run', form: 'pistol', qbPath: [[0, -1], [1.5, 2.5], [3, 4.5], [12, 5]], desc: 'Fake left, QB follows the pullers right.' },
+  { id: 'qbsweep', name: 'QB Sweep', type: 'qbrun', cat: 'QB Run', form: 'gun', qbPath: [[1, 2.5], [2.5, 4.5], [12, 5]], desc: 'Get your QB to the perimeter.' },
+  { id: 'qbiso', name: 'QB Iso', type: 'qbrun', cat: 'QB Run', form: 'pistol', qbPath: [[1.5, -0.6], [4, -0.8], [10, -0.8]], desc: 'RB leads, QB runs it up the gut.' },
+  // ---- RPOs ----
+  { id: 'rposlantflat', name: 'RPO Slant Flat', type: 'rpo', cat: 'RPO', form: 'gun', read: 'LB1', quick: true,
+    path: [[0.4, -1.5], [1.5, -3], [9, -3.5]], routes: { WR1: 'slant', WR3: 'flat', WR2: 'hitch' }, desc: 'Slant-flat tag on inside zone.' },
+  { id: 'rpostick', name: 'RPO Stick', type: 'rpo', cat: 'RPO', form: 'trips', read: 'LB2', quick: true,
+    path: [[0.4, 1.5], [1.5, 3], [9, 3.5]], routes: { WR3: 'stick', TE: 'flat', WR2: 'hitch' }, desc: 'Stick concept married to the run.' },
+  { id: 'rpopop', name: 'RPO Pop Pass', type: 'rpo', cat: 'RPO', form: 'single', read: 'LB1', quick: true,
+    path: [[1.5, 0], [4, 1.2], [10, 1.6]], routes: { TE: 'seam', WR1: 'slant' }, desc: 'LB steps up, pop it to the TE behind him.' },
+  // ---- passes ----
+  { id: 'smash', name: 'Smash', type: 'pass', cat: 'Pass', form: 'gun', routes: { WR1: 'hitch', WR3: 'corner', WR2: 'hitch', TE: 'corner', RB: 'flat' }, desc: 'Hitch under, corner over. Beats Cover 2.' },
+  { id: 'flood', name: 'Flood', type: 'pass', cat: 'Pass', form: 'trips', routes: { WR2: 'go', WR3: 'sail', TE: 'flat', WR1: 'dig', RB: 'block' }, desc: 'Three levels to one side. Beats Cover 3.' },
+  { id: 'ycross', name: 'Y-Cross', type: 'pass', cat: 'Pass', form: 'gun', routes: { WR1: 'post', WR2: 'go', WR3: 'drag', TE: 'cross', RB: 'flat' }, desc: 'TE deep cross under the post.' },
+  { id: 'levels', name: 'Levels', type: 'pass', cat: 'Pass', form: 'gun', routes: { WR1: 'deepdig', WR3: 'drag', WR2: 'curl', TE: 'seam', RB: 'swing' }, desc: 'Two in-breakers at different depths.' },
+  { id: 'dagger', name: 'Dagger', type: 'pass', cat: 'Pass', form: 'gun', routes: { WR3: 'seam', WR1: 'deepdig', WR2: 'hitch', TE: 'flat', RB: 'block' }, desc: 'Seam clears it out, deep dig comes in behind.' },
+  { id: 'spacing', name: 'Spacing', type: 'pass', cat: 'Pass', form: 'trips', routes: { WR1: 'spot', WR2: 'hitch', WR3: 'spot', TE: 'flat', RB: 'swing' }, desc: 'Find the hole in the zone, quick and easy.' },
+  { id: 'stickplay', name: 'Stick', type: 'pass', cat: 'Pass', form: 'trips', routes: { WR3: 'stick', TE: 'flat', WR2: 'go', WR1: 'slant', RB: 'block' }, desc: 'Third-and-short money play.' },
+  { id: 'doublemove', name: 'Double Moves', type: 'pass', cat: 'Pass', form: 'gun', routes: { WR1: 'sluggo', WR2: 'outup', WR3: 'hitch', RB: 'block' }, desc: 'Sell the short route, then go deep.' },
+  { id: 'fadeslant', name: 'Fade Slant', type: 'pass', cat: 'Pass', form: 'gun', routes: { WR1: 'fade', WR2: 'fade', WR3: 'slant', TE: 'hitch', RB: 'flat' }, desc: 'Back-shoulder fades outside, slant inside.' },
+  { id: 'bunchsnag', name: 'Bunch Snag', type: 'pass', cat: 'Pass', form: 'bunch', routes: { WR1: 'corner', WR3: 'spot', TE: 'flat', WR2: 'go', RB: 'block' }, desc: 'Triangle read out of a tight bunch.' },
+  { id: 'bunchverts', name: 'Bunch Verts', type: 'pass', cat: 'Pass', form: 'bunch', routes: { WR1: 'go', WR3: 'seam', TE: 'out', WR2: 'post', RB: 'swing' }, desc: 'Release the bunch vertical, rub the man defenders.' },
+  { id: 'emptyquick', name: 'Empty Quick', type: 'pass', cat: 'Pass', form: 'empty', routes: { WR1: 'slant', WR2: 'out', WR3: 'hitch', TE: 'stick', RB: 'slant' }, desc: 'Five wide, ball out in a flash.' },
+  { id: 'emptyshot', name: 'Empty Shot', type: 'pass', cat: 'Pass', form: 'empty', routes: { WR1: 'go', WR2: 'post', WR3: 'seam', TE: 'dig', RB: 'corner' }, desc: 'Five wide, take the top off.' },
+  { id: 'paboot', name: 'PA Boot', type: 'pass', cat: 'Pass', form: 'pistol', pa: true, routes: { TE: 'flat', WR3: 'cross', WR2: 'go', WR1: 'dig', RB: 'block' }, desc: 'Fake the run, roll out, flat-cross-go.' },
+  { id: 'texas', name: 'Texas', type: 'pass', cat: 'Pass', form: 'gun', routes: { RB: 'angle', WR1: 'go', WR2: 'curl', WR3: 'drag', TE: 'seam' }, desc: 'RB angle route eats linebackers alive.' },
+  { id: 'wrscreen', name: 'WR Screen', type: 'pass', cat: 'Pass', form: 'gun', screen: true, screenTo: 'WR1', routes: { WR1: 'wrscreen', WR3: 'block', TE: 'block', WR2: 'go', RB: 'block' }, desc: 'Quick screen outside with blockers in front.' },
+  { id: 'swing', name: 'RB Swing', type: 'pass', cat: 'Pass', form: 'gun', routes: { RB: 'swing', WR1: 'go', WR2: 'go', WR3: 'curl', TE: 'block' }, desc: 'Get your back the ball in space.' },
+  { id: 'ipadeep', name: 'I-Form PA Deep', type: 'pass', cat: 'Pass', form: 'iform', pa: true, routes: { WR1: 'post', WR3: 'go', TE: 'deepdig', WR2: 'comeback', RB: 'block' }, desc: 'Heavy look, max protection, shot downfield.' },
+  { id: 'glfade', name: 'Goal Line Fade', type: 'pass', cat: 'Pass', form: 'tight', routes: { WR3: 'flat', TE: 'corner', WR1: 'fade', WR2: 'slant' }, desc: 'Red zone: fade the outside man.' },
+  // ---- trick plays ----
+  { id: 'statue', name: 'Statue of Liberty', type: 'trick', cat: 'Trick', form: 'gun', handTo: 'RB', handAt: 0.9, passPro: true,
+    path: [[-0.5, -1], [0.5, -4], [3, -8], [18, -10]], routes: { WR1: 'go', WR2: 'go', WR3: 'post', TE: 'seam' }, desc: 'QB pump fakes, RB takes it out of his hand going the other way.' },
+  { id: 'reversepass', name: 'Reverse Pass', type: 'trick', cat: 'Trick', form: 'gun', handTo: 'WR3', jet: true, handPass: true, fakeRun: true,
+    carrierPath: [[-2.2, 4.5], [0.3, 4], [0.2, 3], [0, 2]], routes: { WR1: 'go', WR2: 'post', TE: 'corner' }, desc: 'Jet sweep look, the receiver pulls up and throws.' },
+  { id: 'tethrowback', name: 'TE Throwback', type: 'trick', cat: 'Trick', form: 'gun', directSnap: 'RB', directNoPass: true, fakeRun: true,
+    lateralTo: 'TE', latFrom: 'RB', latAt: 0.6, path: [[0.5, 2], [0.6, 2.5]], routes: { QB: 'wheel', WR1: 'go', WR2: 'post' },
+    desc: 'Direct snap to the RB, pitch to the TE, TE throws it to the QB.' },
+  { id: 'fakepunt', name: 'Fake Punt', type: 'trick', cat: 'Trick', form: 'single', directSnap: 'RB', directNoPass: true, fakeSpecial: true,
+    path: [[1, 3], [3, 6], [14, 7]], desc: 'Fourth down surprise: direct snap, sweep it.' },
+  { id: 'fakefg', name: 'Fake Field Goal', type: 'pass', cat: 'Trick', form: 'single', fakeSpecial: true, quick: true,
+    routes: { TE: 'flat', WR3: 'corner', WR1: 'slant', WR2: 'go', RB: 'flat' }, desc: 'The holder pops up and throws.' },
+];
+for (const p of MORE_PLAYS) {
+  p.routes = p.routes || {};
+  OFF_PLAYS.push(p);
+  if (['option', 'speedopt', 'rpo', 'qbrun', 'trick'].includes(p.type) && p.cat !== 'Run') NEW_PLAYS.push(p);
+}
+
+// a fake catches the defense in its special-teams look
+const _chooseX = LiveGame.prototype.choose;
+LiveGame.prototype.choose = function (id) {
+  _chooseX.call(this, id);
+  if (this.phase === 'pre' && this.offPlay && this.offPlay.fakeSpecial && !this.userOnDefense()) {
+    this.defPlay = DEF_PLAYS.find(p => p.id === 'prevent'); this.setup(); this.phase = 'pre';
+  }
 };
 
 // ============================================================
@@ -3928,6 +4040,7 @@ document.addEventListener('click', e => {
     case 'call-play': if (GAME) { $('#playcall').hidden = true; GAME.live.choose(el.dataset.id); } break;
     case 'call-auto': if (GAME) { $('#playcall').hidden = true; const lg = GAME.live; lg.choose(lg.userOnOffense() ? autoOffCall(lg.gs) : cpuDefCall(lg.gs).id); } break;
     case 'offense-only-now': if (GAME) { LEAGUE.settings.simDef = true; save(); $('#simDefBtn').textContent = 'Offense only: On'; $('#playcall').hidden = true; toast('Offense only ON. Turn it off any time in the pause menu.'); GAME.live.next(); } break;
+    case 'pc-tab': PC_TAB = el.dataset.cat; $$('#playcall .pc-sec').forEach(s => s.hidden = PC_TAB !== 'All' && s.dataset.cat !== PC_TAB); $$('#playcall .pc-tabs .tab').forEach(b => b.classList.toggle('on', b.dataset.cat === PC_TAB)); $('#playcall').scrollTop = 0; break;
     case 'audible': if (GAME && GAME.live.phase === 'pre') showPlayCall('off', true); break;
     case 'hot-open': openHotMenu(); break;
     case 'hot-set': if (GAME) { GAME.live.setHotRoute(el.dataset.role, el.dataset.route); openHotMenu(); } break;
@@ -4098,6 +4211,7 @@ function playSVG(play, kind) {
   return s + '</svg>';
 }
 
+let PC_TAB = 'All';
 function showPlayCall(mode, audible) {
   const lg = GAME.live, gs = lg.gs, L = LEAGUE;
   const el = $('#playcall');
@@ -4109,15 +4223,18 @@ function showPlayCall(mode, audible) {
     if (gs.down === 4 || (gs.clock < 30 && (gs.quarter === 2 || gs.quarter >= 4))) {
       if (fp > 0.02) specials.push(`<button class="play special" data-act="call-play" data-id="fg"><span class="tag">Special teams</span><span class="pn">Field Goal</span><span class="pd">${dist} yds · ~${Math.round(fp * 100)}% for ${esc(pshort(k))}</span></button>`);
       if (gs.down === 4) specials.push(`<button class="play special" data-act="call-play" data-id="punt"><span class="tag">Special teams</span><span class="pn">Punt</span><span class="pd">Flip the field.</span></button>`);
+      if (gs.down === 4) specials.push(`<button class="play special" data-act="call-play" data-id="fakepunt"><span class="tag">Fake</span><span class="pn">Fake Punt</span><span class="pd">They set up to return it. Run it instead.</span></button>`);
+      if (gs.down === 4 && fp > 0.02) specials.push(`<button class="play special" data-act="call-play" data-id="fakefg"><span class="tag">Fake</span><span class="pn">Fake Field Goal</span><span class="pd">The holder pops up and throws.</span></button>`);
     }
     if (gs.score[gs.poss] > gs.score[1 - gs.poss] && gs.quarter >= 4 && gs.clock < 150) specials.push(`<button class="play special" data-act="call-play" data-id="kneel"><span class="tag">Clock</span><span class="pn">QB Kneel</span><span class="pd">Run out the clock.</span></button>`);
     const cats = ['Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
-    cards = specials.join('') + cats.map(c => { const ps = OFF_PLAYS.filter(p => (p.cat || 'Pass') === c); if (!ps.length) return ''; return `<h3 class="pc-cat">${c === 'Trick' ? 'Trick plays' : c === 'RPO' ? 'RPOs' : c}</h3>` + ps.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'off')}<span class="tag">${c}</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join(''); }).join('');
+    cards = specials.join('') + cats.map(c => { const ps = OFF_PLAYS.filter(p => (p.cat || 'Pass') === c); if (!ps.length) return ''; return `<div class="pc-sec" data-cat="${c}" ${PC_TAB !== 'All' && PC_TAB !== c ? 'hidden' : ''}><h3 class="pc-cat">${c === 'Trick' ? 'Trick plays' : c === 'RPO' ? 'RPOs' : c} <span class="muted small">${ps.length}</span></h3>` + ps.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'off')}<span class="tag">${c}</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('') + '</div>'; }).join('');
   } else {
     cards = DEF_PLAYS.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'def')}<span class="tag">Defense</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('');
   }
   el.innerHTML = `<div class="pc-inner wrap"><div class="pc-head"><h2>${audible ? 'Audible' : mode === 'off' ? 'Call your play' : 'Call your defense'}</h2><span class="pill amber">${sit}</span><span class="grow"></span>
     <button class="btn sm" data-act="call-auto">Ask coach</button><button class="btn sm" data-act="sim-drive">Sim this drive</button>${mode === 'def' ? '<button class="btn sm primary" data-act="offense-only-now">Offense only from now on</button>' : ''}<button class="btn sm ghost" data-act="sim-game-rest">Sim rest of game</button></div>
+    ${mode === 'off' ? `<div class="pc-tabs">${['All', 'Run', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'].map(t => `<button class="tab ${PC_TAB === t ? 'on' : ''}" data-act="pc-tab" data-cat="${t}">${t === 'Trick' ? 'Trick plays' : t}</button>`).join('')}</div>` : ''}
     <div class="plays">${cards}</div></div>`;
   el.hidden = false;
 }

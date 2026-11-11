@@ -29,7 +29,9 @@ LX.setup = function () {
     const rb = O[op.directSnap];
     this.ball.holder = rb; this.passer = rb; this.passReady = false; this.passReadyAt = null;
     if (op.routes.QB) { O.QB.task = { k: 'route', name: op.routes.QB, pts: this.routePts(op.routes.QB, O.QB.x, O.QB.y, by), i: 0 }; this.eligible.push(O.QB); }
-    for (const e of O.OL) e.task = { k: 'pblock', assign: e.task.assign };
+    for (const e of O.OL) e.task = { k: op.directNoPass ? 'rblock' : 'pblock', assign: e.task.assign };
+    if (op.directNoPass) this.runBlocking = true;
+    if (op.latFrom && O[op.lateralTo]) O[op.lateralTo].task = { k: 'hold' };
     if (this.userOnOffense()) this.ctrl = rb;
   }
 };
@@ -45,7 +47,7 @@ LX.scriptStep = function (dt) {
       pl.readSet = true; pl.handoff = true;
       for (const d of this.ents) if (d.side === 'D' && (d.role.startsWith('DL') || d.role.startsWith('LB'))) d.read = Math.min(d.read, this.t + d.react);
     }
-    if (!this.passReady && !pl.thrown && this.t > 0.75 && car === this.passer) {
+    if (!op.directNoPass && !this.passReady && !pl.thrown && this.t > 0.75 && car === this.passer) {
       this.passReady = true; this.passReadyAt = this.t;
       // the most alert defender nearby picks up the leaking QB
       const qb = O.QB; const cover = this.ents.filter(d => d.side === 'D' && !d.eng).sort((a, b) => (this.dist(a, qb) - a.r.awr / 10) - (this.dist(b, qb) - b.r.awr / 10))[0];
