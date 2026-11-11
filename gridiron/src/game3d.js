@@ -91,29 +91,69 @@ function grainCanvas(W, H) {
   return cv;
 }
 
+// crowd texture for the stands (cached per home colors)
+let _crowdPat = null;
+function crowdPattern(ctx, c1, c2) {
+  const key = c1 + c2;
+  if (_crowdPat && _crowdPat.key === key) return _crowdPat.pat;
+  const cv = _mkCanvas(96, 48), g = cv.getContext('2d');
+  g.fillStyle = '#1a2130'; g.fillRect(0, 0, 96, 48);
+  const pal = [c1, c1, c2, '#e8e8e8', '#9aa2ad', '#d6c4ae', '#5a6372', c1, '#2b3442', '#c0392b', '#2e86de'];
+  for (let y = 2; y < 48; y += 4) for (let x = (y % 8 ? 2 : 0); x < 96; x += 4) {
+    g.fillStyle = pal[(Math.random() * pal.length) | 0]; g.beginPath(); g.arc(x + Math.random(), y + Math.random(), 1.6, 0, Math.PI * 2); g.fill();
+  }
+  const pat = ctx.createPattern(cv, 'repeat');
+  _crowdPat = { key, pat };
+  return pat;
+}
+
 LiveGame.prototype.render3D = function (ctx, W, H) {
   const gs = this.gs;
-  const F = Math.min(0.31 * W, 0.6 * H), hor = H * 0.2;
-  const nearZ = 10, camH = (H * 0.97 - hor) * nearZ / F;
-  const cy = clamp(this.cam.y, MID_Y - 12, MID_Y + 12);
+  // ---- telephoto broadcast camera: high and far back, long lens, gentle perspective ----
+  const portrait = H > W * 1.05;
   const pocket = this.phase === 'pre' || this.phase === 'call' || (this.phase === 'live' && this.carrier() === this.passer && this.passReady && !this.play.crossed);
-  this.backT = (this.backT == null ? 28 : this.backT) + ((pocket ? 28 : 19) - (this.backT == null ? 28 : this.backT)) * 0.06;
-  this.c3 = { F, hor, camH, W, H, camX: this.cam.x - this.backT, camY: this.c3 ? this.c3.camY + (cy - this.c3.camY) * 0.08 : cy };
+  this.backT = (this.backT == null ? 56 : this.backT) + ((pocket ? 56 : 50) - (this.backT == null ? 56 : this.backT)) * 0.06;
+  const B = this.backT, behind = 12, yLos = portrait ? 0.64 : 0.6;
+  const zb = B - 9 - behind, zl = B - 9;
+  const C = (H - H * yLos) / (1 / zb - 1 / zl);       // vertical projection constant
+  const hor = H - C / zb;                             // horizon (usually above the screen)
+  const F = (portrait ? 1.7 : 1.12) * W * zl / FIELD_W; // field width at the line of scrimmage ~ screen width
+  const camH = C / F;
+  const cy = clamp(this.cam.y, MID_Y - 14, MID_Y + 14);
+  this.c3 = { F, hor, camH, C, W, H, camX: this.cam.x - B, camY: this.c3 ? this.c3.camY + (cy - this.c3.camY) * 0.1 : cy };
   const P = (x, y, h) => this.proj(x, y, h);
   const homeT = this.teamOf(0), awayT = this.teamOf(1), offT = this.teamOf(gs.poss), defT = this.teamOf(1 - gs.poss);
   const x0 = this.c3.camX + 1;
 
-  // ---- stadium ----
-  ctx.drawImage(crowdCanvas(Math.ceil(W), Math.ceil(hor + 2), homeT.c1, homeT.c2), 0, 0);
+  // ---- backdrop + stands in 3D ----
+  const sky = ctx.createLinearGradient(0, 0, 0, H * 0.4);
+  sky.addColorStop(0, '#05080e'); sky.addColorStop(1, '#141c2a');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  const polyH = (pts, fill) => { // pts: [x, y, h]
+    const pp = []; for (const [x, y, h] of pts) { const p = P(Math.max(x, x0), y, h || 0); if (!p) return; pp.push(p); }
+    ctx.fillStyle = fill; ctx.beginPath(); ctx.moveTo(pp[0].x, pp[0].y); for (let i = 1; i < pp.length; i++) ctx.lineTo(pp[i].x, pp[i].y); ctx.closePath(); ctx.fill();
+  };
+  const crowd = crowdPattern(ctx, homeT.c1, homeT.c2);
+  const xFar = 160;
+  // far end: wall + rising crowd behind the end line
+  polyH([[124, -40, 2.6], [124, FIELD_W + 40, 2.6], [150, FIELD_W + 60, 22], [150, -60, 22]], crowd);
+  polyH([[124, -40, 0], [124, FIELD_W + 40, 0], [124, FIELD_W + 40, 2.6], [124, -40, 2.6]], shade(homeT.c1, -0.25));
+  // side stands: wall at the edge of the apron, crowd rising away from the field
+  for (const [yw, yo] of [[-12, -34], [FIELD_W + 12, FIELD_W + 34]]) {
+    polyH([[x0, yw, 2.6], [124, yw, 2.6], [150, yo, 22], [x0, yo, 22]], crowd);
+    polyH([[x0, yw, 0], [124, yw, 0], [124, yw, 2.6], [x0, yw, 2.6]], shade(homeT.c1, -0.3));
+    polyH([[x0, yw, 2.4], [124, yw, 2.4], [124, yw, 2.75], [x0, yw, 2.75]], homeT.c2);
+  }
   // crowd camera flashes
   if (this.phase === 'live' || (this.banner && this.banner.big)) {
-    const n = this.banner && this.banner.big ? 14 : 3;
-    for (let i = 0; i < n; i++) if (Math.random() < 0.5) { ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(Math.random() * W, hor * (0.3 + Math.random() * 0.6), 2, 2); }
+    const n = this.banner && this.banner.big ? 16 : 4;
+    for (let i = 0; i < n; i++) if (Math.random() < 0.5) {
+      const side = Math.random() < 0.5 ? -1 : 1, p = P(this.cam.x + rand(-10, 40), side < 0 ? rand(-30, -14) : rand(FIELD_W + 14, FIELD_W + 30), rand(4, 18));
+      if (p && p.y > 0 && p.y < H) { ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.fillRect(p.x, p.y, 2.5, 2.5); }
+    }
   }
-  // ---- ground around the field (sidelines) ----
-  const ground = ctx.createLinearGradient(0, hor, 0, H);
-  ground.addColorStop(0, '#163f20'); ground.addColorStop(1, '#1f5a2c');
-  ctx.fillStyle = ground; ctx.fillRect(0, hor, W, H - hor);
+  // ground (apron) only between the stands
+  polyH([[x0, -12, 0], [x0, FIELD_W + 12, 0], [124, FIELD_W + 12, 0], [124, -12, 0]], '#1c5129');
 
   const poly = (pts, fill) => {
     const pp = []; for (const [x, y] of pts) { const p = P(x, y); if (!p) return; pp.push(p); }
@@ -131,9 +171,7 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
     if (q.some(v => !v)) return;
     ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y); for (let i = 1; i < 4; i++) ctx.lineTo(q[i].x, q[i].y); ctx.closePath(); ctx.fill();
   };
-  // sideline apron + team benches
-  quad(-10, 130, -12, 0, '#1b4f27'); quad(-10, 130, FIELD_W, FIELD_W + 12, '#1b4f27');
-  quad(-10, 130, -2, 0, 'rgba(255,255,255,.12)'); quad(-10, 130, FIELD_W, FIELD_W + 2, 'rgba(255,255,255,.12)');
+  quad(-10, 124, -2, 0, 'rgba(255,255,255,.12)'); quad(-10, 124, FIELD_W, FIELD_W + 2, 'rgba(255,255,255,.12)');
   quad(35, 85, -9, -4, shade(homeT.c1, -0.35)); quad(35, 85, FIELD_W + 4, FIELD_W + 9, shade(awayT.c1, -0.35));
 
   // ---- field: mowed stripes + cross-cut ----
@@ -150,7 +188,7 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
     for (let d = -12; d < 60; d += 3.2) line(ez, d, ez + 10, d + 10, 1.1, 'rgba(255,255,255,.07)');
   }
   // grain over everything grassy
-  ctx.save(); ctx.globalCompositeOperation = 'source-over'; ctx.drawImage(grainCanvas(Math.ceil(W), Math.ceil(H - hor)), 0, hor); ctx.restore();
+  ctx.save(); ctx.globalCompositeOperation = 'source-over'; ctx.drawImage(grainCanvas(Math.ceil(W), Math.ceil(H)), 0, 0); ctx.restore();
 
   // ---- paint ----
   const chalk = 'rgba(255,255,255,.9)';
@@ -162,7 +200,7 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
   }
   const groundText = (txt, x, y, sizeYds, col, stroke) => {
     const p = P(x, y); if (!p || p.k < 1.5) return;
-    ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1, Math.min(0.55, 4.5 / p.z + 0.12));
+    ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1, clamp(this.c3.C / (this.c3.F * p.z), 0.12, 0.95));
     ctx.font = `800 ${Math.round(sizeYds * p.k)}px 'Saira Condensed', system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     if (stroke) { ctx.lineWidth = Math.max(2, sizeYds * p.k * 0.08); ctx.strokeStyle = stroke; ctx.strokeText(txt, 0, 0); }
     ctx.fillStyle = col; ctx.fillText(txt, 0, 0); ctx.restore();
@@ -177,12 +215,17 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
       for (const yy of [9, FIELD_W - 9]) { const a = P(x + dir * 1.6, yy - 1.6), b = P(x + dir * 1.6, yy + 1.6), c = P(x + dir * 2.4, yy); if (a && b && c) { ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.fill(); } }
     }
   }
-  if (60 > x0 + 3) {
-    const p = P(60, MID_Y), img = typeof emblemImage === 'function' ? emblemImage(homeT) : null;
-    if (p && img) { ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1, Math.min(0.55, 4.5 / p.z + 0.12)); const s = 10 * p.k; ctx.globalAlpha = 0.95; ctx.drawImage(img, -s / 2, -s / 2, s, s); ctx.restore(); }
-  }
-  if (115 > x0) groundText(defT.name.toUpperCase(), 115, MID_Y, 5.2, '#ffffff', shade(defT.c1, -0.5));
-  if (5 > x0 + 1) groundText(offT.name.toUpperCase(), 5, MID_Y, 5.2, '#ffffff', shade(offT.c1, -0.5));
+  const groundImg = (img, x, y, sizeYds) => {
+    const p = P(x, y); if (!p || !img || p.k < 1.2) return;
+    ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1, clamp(this.c3.C / (this.c3.F * p.z), 0.12, 0.95));
+    const s2 = sizeYds * p.k; ctx.globalAlpha = 0.95; ctx.drawImage(img, -s2 / 2, -s2 / 2, s2, s2); ctx.restore();
+  };
+  const em = t => typeof emblemImage === 'function' ? emblemImage(t) : null;
+  if (60 > x0 + 3) groundImg(em(homeT), 60, MID_Y, 13);
+  if (115 > x0) { groundImg(em(defT), 115, 9, 6.5); groundImg(em(defT), 115, FIELD_W - 9, 6.5); }
+  if (5 > x0 + 1) { groundImg(em(offT), 5, 9, 6.5); groundImg(em(offT), 5, FIELD_W - 9, 6.5); }
+  if (115 > x0) groundText(defT.name.toUpperCase(), 115, MID_Y, 6, '#ffffff', shade(defT.c1, -0.5));
+  if (5 > x0 + 1) groundText(offT.name.toUpperCase(), 5, MID_Y, 6, '#ffffff', shade(offT.c1, -0.5));
 
   // ---- goal posts (padded base, gooseneck, uprights with flags) ----
   const goalPost = gx => {
@@ -247,6 +290,12 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
     const side = e.side === 'O' ? gs.poss : 1 - gs.poss;
     const sp = Math.hypot(e.vx, e.vy); e.phase = (e.phase || Math.random() * 6) + sp * 0.032;
     drawFigure(ctx, p.x, p.y, p.k, e, this.teamOf(side), side === 0, sp, e === this.ctrl, e === carrier && this.ball && this.ball.state === 'held');
+    if (e === this.ctrl && e.p) {
+      const label = e.p.last.toUpperCase(), fs = Math.round(clamp(p.k * 0.42, 11, 16));
+      ctx.font = `800 ${fs}px 'Saira Condensed', system-ui`; const tw = ctx.measureText(label).width + 10;
+      ctx.fillStyle = 'rgba(0,0,0,.7)'; roundRect(ctx, p.x - tw / 2, p.y + 0.45 * p.k, tw, fs + 6, 4); ctx.fill();
+      ctx.fillStyle = '#ffe14d'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, p.x, p.y + 0.45 * p.k + fs / 2 + 3);
+    }
   }
   if (this.drawScriptTags) this.drawScriptTags(ctx, P);
   // receiver icons
@@ -280,9 +329,6 @@ LiveGame.prototype.render3D = function (ctx, W, H) {
   this.effects = this.effects.filter(f => f.t <= 1.2);
 
   // ---- atmosphere: horizon haze + vignette ----
-  const haze = ctx.createLinearGradient(0, hor, 0, hor + H * 0.25);
-  haze.addColorStop(0, 'rgba(170,190,215,.22)'); haze.addColorStop(1, 'rgba(170,190,215,0)');
-  ctx.fillStyle = haze; ctx.fillRect(0, hor, W, H * 0.25);
   const vig = ctx.createRadialGradient(W / 2, H * 0.55, Math.min(W, H) * 0.35, W / 2, H * 0.55, Math.max(W, H) * 0.75);
   vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,.42)');
   ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
