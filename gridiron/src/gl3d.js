@@ -282,7 +282,8 @@ LiveGame.prototype.renderGL = function (ctx, W, H) {
   const pocket = this.phase === 'pre' || this.phase === 'call' || (this.phase === 'live' && this.carrier() === this.passer && this.passReady && !this.play.crossed);
   this.glBack = (this.glBack == null ? 34 : this.glBack) + ((pocket ? 34 : 29) - (this.glBack == null ? 34 : this.glBack)) * 0.06;
   const cy = clamp(this.cam.y, MID_Y - 14, MID_Y + 14);
-  this.glCamY = this.glCamY == null ? cy : this.glCamY + (cy - this.glCamY) * 0.08;
+  const fastCam = this.ball && (this.ball.state === 'air' || this.ball.state === 'pitch' || (this.play && (this.play.caught || this.play.int)));
+  this.glCamY = this.glCamY == null ? cy : this.glCamY + (cy - this.glCamY) * (fastCam ? 0.16 : 0.08);
   const fx = this.cam.x;
   camera.fov = portrait ? 46 : 30; camera.updateProjectionMatrix();
   camera.position.copy(W2T(fx - this.glBack, this.glCamY, this.glBack * 0.72));
