@@ -2265,7 +2265,12 @@ class LiveGame {
     // ---- whistle checks ----
     const c = this.carrier();
     if (c) {
-      if (c.x > this.los + 0.3 && c.side === 'O') pl.crossed = true;
+      if (c.x > this.los + 0.3 && c.side === 'O' && !pl.crossed) {
+        // first time the ball crosses the line: everyone on defense reacts (this used to skip the alert)
+        pl.crossed = true;
+        if (c === this.passer && !pl.thrown) pl.scramble = true;
+        this.readAll(this.t, 'scramble');
+      }
       if (c.y < 0 || c.y > FIELD_W) return this.endPlay('oob');
       if (c.side === 'O' && c.x >= 110) return this.endPlay('td');
       if (c.side === 'D' && c.x <= 10) return this.endPlay('td');
