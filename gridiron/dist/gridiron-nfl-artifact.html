@@ -372,6 +372,40 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
 .cp-who { gap: 6px; flex-wrap: wrap; }
 @media (max-width: 760px) { .cp-wrap { grid-template-columns: 1fr; } }
 
+/* ---- pre-snap, weather, replay, ticker ---- */
+#defBtns { top: auto; }
+.wxfx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; display: none; z-index: 3; }
+.wx-chip { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 4px; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 99px; background: rgba(0,0,0,.55); color: #fff; white-space: nowrap; }
+.scorebug { position: absolute; }
+.ticker { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); max-width: min(92%, 720px); padding: 8px 16px; border-radius: 10px; background: rgba(8,12,18,.82); border: 1px solid rgba(255,255,255,.15); color: #fff; font-size: 15px; z-index: 6; pointer-events: none; text-align: center; }
+.replay-btn { position: absolute; right: 16px; bottom: 140px; z-index: 8; }
+/* ---- superstar ---- */
+.ss-hero { display: flex; gap: 16px; align-items: center; background: linear-gradient(110deg, color-mix(in srgb, var(--c1) 55%, var(--bg2)), var(--bg2) 70%); }
+.ss-num { font: 800 64px/1 var(--f-display); color: rgba(255,255,255,.9); min-width: 80px; text-align: center; }
+.ring.big { transform: scale(1.25); margin-right: 10px; }
+.bar { height: 6px; border-radius: 4px; background: var(--bg3); overflow: hidden; margin-top: 4px; }
+.bar i { display: block; height: 100%; background: var(--amber); }
+.bar.xp { height: 8px; margin-top: 8px; max-width: 420px; }
+.goal { margin: 8px 0; font-size: 14px; }
+/* ---- owner / staff / locker ---- */
+.own-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.own-stats > div { background: var(--bg3); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; }
+.own-stats b { font: 800 24px/1.1 var(--f-display); }
+.own-stats b.neg, .chem b.neg { color: #ff7b72; } .chem b.pos { color: #7ee2a8; }
+.own-up { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.staff-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.chem { display: flex; gap: 10px; align-items: baseline; } .chem b { font: 800 34px/1 var(--f-display); }
+/* ---- rankings + bracket ---- */
+tr.me td { background: color-mix(in srgb, var(--amber) 12%, transparent); }
+td.up { color: #7ee2a8; } td.down { color: #ff7b72; }
+.bracket { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 10px; overflow-x: auto; }
+.bk-col { display: flex; flex-direction: column; gap: 8px; justify-content: space-around; }
+.bk-g { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg3); }
+.bk-g.live { border-color: var(--amber); }
+.bk-t { display: flex; gap: 6px; align-items: center; padding: 5px 8px; font-size: 13px; } .bk-t b { margin-left: auto; }
+.bk-t.w { font-weight: 800; } .bk-t.l { opacity: .55; } .bk-t.me { box-shadow: inset 3px 0 0 var(--amber); }
+table.box td, table.box th { padding: 4px 8px; }
+
 </style>
 <section id="menu" class="screen">
   <div class="menu-inner wrap">
@@ -401,6 +435,8 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
         <label>Quarter length <select id="setQlen"><option value="120">2 min</option><option value="180">3 min</option><option value="240" selected>4 min</option><option value="300">5 min</option><option value="480">8 min</option></select></label>
         <label id="awayWrap" hidden>Opponent <select id="setAway"></select></label>
         <label class="row" style="gap:6px"><input type="checkbox" id="setSimDef"> <b>Offense only</b>&nbsp;(CPU drives are simmed)</label>
+        <label class="row" style="gap:6px"><input type="checkbox" id="setSS"> <b>Superstar mode</b>&nbsp;(play as one player)</label>
+        <span id="ssFields" class="row" style="gap:6px" hidden><input id="ssFirst" placeholder="First name" maxlength="16" style="width:110px"><input id="ssLast" placeholder="Last name" maxlength="18" style="width:120px"><select id="ssPos"><option>QB</option><option>RB</option><option selected>WR</option><option>TE</option><option>DL</option><option>LB</option><option>CB</option><option>S</option></select></span>
         <span class="grow"></span>
         <button class="btn primary" data-act="setup-go" id="setupGo" disabled>Start</button>
       </div>
@@ -419,6 +455,9 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
 <section id="game" class="screen" hidden>
   <canvas id="gl" style="display:none"></canvas>
   <canvas id="cv"></canvas>
+  <canvas id="wxfx" class="wxfx"></canvas>
+  <div class="ticker" id="ticker" hidden></div>
+  <button class="btn sm primary replay-btn" id="replayBtn" data-act="replay" hidden>▶ Replay</button>
   <div class="scorebug" id="scorebug"></div>
   <button class="g-btn" id="pauseBtn" aria-label="Pause">❚❚</button>
   <div class="rotate-tip">Turn your phone sideways for the best view</div>
@@ -435,10 +474,12 @@ kbd { background: #222; border: 1px solid #444; border-bottom-width: 2px; border
       <button class="tb" id="tbSprint">Sprint</button>
     </div>
   </div>
-  <div class="prebtns" id="preBtns" hidden><button class="btn sm" data-act="audible">Audible <kbd>P</kbd></button><button class="btn sm" data-act="hot-open">Hot route <kbd>H</kbd></button></div>
+  <div class="prebtns" id="preBtns" hidden><button class="btn sm" data-act="audible">Audible <kbd>P</kbd></button><button class="btn sm" data-act="hot-open">Hot route <kbd>H</kbd></button><button class="btn sm" id="motionBtn" data-act="motion">Motion <kbd>M</kbd></button></div>
+  <div class="prebtns" id="defBtns" hidden><button class="btn sm" data-act="dadj" data-k="blitz">Show blitz <kbd>B</kbd></button><button class="btn sm" data-act="dadj" data-k="press">Press / off <kbd>C</kbd></button><button class="btn sm" data-act="dadj" data-k="left">◀ Shift <kbd>,</kbd></button><button class="btn sm" data-act="dadj" data-k="right">Shift ▶ <kbd>.</kbd></button></div>
   <div class="playcall" id="hotMenu" hidden></div>
   <div class="playcall" id="playcall" hidden></div>
   <div class="final" id="final" hidden></div>
+  <div class="final" id="halftime" hidden></div>
   <div class="modal" id="pause" hidden>
     <div class="modal-box">
       <h2>Paused</h2>
@@ -4774,7 +4815,8 @@ function setupGo() {
 }
 
 // ============================================================ HUB
-const TABS = [['home', 'Home'], ['lineup', 'Lineup'], ['roster', 'Roster'], ['depth', 'Depth Chart'], ['dev', 'Development'], ['cap', 'Contracts'], ['schedule', 'Schedule'], ['standings', 'Standings'], ['stats', 'Leaders'], ['trade', 'Trade'], ['fa', 'Free Agents'], ['scout', 'Scouting'], ['draft', 'Draft'], ['history', 'History'], ['records', 'Records'], ['playbook', 'Playbook'], ['settings', 'Settings']];
+const TABS = [['home', 'Home'], ['lineup', 'Lineup'], ['roster', 'Roster'], ['depth', 'Depth Chart'], ['dev', 'Development'], ['cap', 'Contracts'], ['schedule', 'Schedule'], ['standings', 'Standings'], ['stats', 'Leaders'], ['trade', 'Trade'], ['fa', 'Free Agents'], ['scout', 'Scouting'], ['draft', 'Draft'], ['history', 'History'], ['records', 'Records'], ['playbook', 'Playbook'], ['star', 'My Player'], ['rankings', 'Rankings'], ['locker', 'Locker Room'], ['staff', 'Staff'], ['owner', 'Owner'], ['settings', 'Settings']];
+const EXTRA_VIEWS = {};
 function renderHub() {
   show('hub');
   const L = LEAGUE, t = UT(), o = teamOvr(L, t);
@@ -4786,7 +4828,7 @@ function renderHub() {
   const dotTab = { home: ['recap', 'resign', 'fa', 'draft'].includes(L.phase), draft: L.phase === 'draft', fa: L.phase === 'fa' };
   $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${n}${dotTab[k] ? '<span class="dot"></span>' : ''}</button>`).join('');
   const P = $('#panel');
-  const fn = { home: viewHome, lineup: viewLineup, dev: viewDev, cap: viewCap, scout: viewScout, roster: viewRoster, depth: viewDepth, schedule: viewSchedule, standings: viewStandings, stats: viewStats, trade: viewTrade, fa: viewFA, draft: viewDraft, history: viewHistory, records: viewRecords, playbook: viewPlaybook, settings: viewSettings }[TAB];
+  const fn = { home: viewHome, lineup: viewLineup, dev: viewDev, cap: viewCap, scout: viewScout, roster: viewRoster, depth: viewDepth, schedule: viewSchedule, standings: viewStandings, stats: viewStats, trade: viewTrade, fa: viewFA, draft: viewDraft, history: viewHistory, records: viewRecords, playbook: viewPlaybook, settings: viewSettings }[TAB] || EXTRA_VIEWS[TAB] || viewHome;
   P.innerHTML = fn();
   if (TAB === 'trade') tradeRefresh();
 }
@@ -5407,6 +5449,8 @@ function clockBar(lg, mode) {
   return `<div class="pc-clock row"><span class="small">Timeouts <b class="tos big">${[0, 1, 2].map(i => `<i class="${i < left ? 'on' : ''}"></i>`).join('')}</b></span>
     <button class="btn sm ${saves && left ? 'primary' : ''}" data-act="pc-timeout" ${left && saves ? '' : 'disabled'} title="Stops the clock and gets back the time that ran since the last play">Timeout${saves ? ` (save ${Math.round(gs.lastRunoff)}s)` : ''}</button>
     ${mode === 'off' ? `<button class="btn sm ${gs.noHuddle[u] ? 'primary' : ''}" data-act="pc-nohuddle">No-huddle: ${gs.noHuddle[u] ? 'ON' : 'OFF'}</button>` : ''}
+    ${gs.quarter >= 4 && gs.onside ? `<button class="btn sm ${gs.onside[u] ? 'primary' : ''}" data-act="onside-toggle" title="Your next kickoff will be an onside kick">Onside kick: ${gs.onside[u] ? 'ON' : 'OFF'}</button>` : ''}
+    ${gs.weather ? `<span class="pill">${wxLabel(gs)}</span>` : ''}
     ${twoMinuteTime(gs) ? '<span class="pill red">Two-minute drill</span>' : ''}</div>`;
 }
 function showPlayCall(mode, audible) {
@@ -5425,7 +5469,7 @@ function showPlayCall(mode, audible) {
     }
     if (gs.score[gs.poss] > gs.score[1 - gs.poss] && gs.quarter >= 4 && gs.clock < 150) specials.push(`<button class="play special" data-act="call-play" data-id="kneel"><span class="tag">Clock</span><span class="pn">QB Kneel</span><span class="pd">Run out the clock.</span></button>`);
     if (twoMinuteTime(gs) && (gs.lastRunoff || 0) > 0 && gs.down < 4) specials.unshift(`<button class="play special" data-act="call-play" data-id="spike"><span class="tag">Clock</span><span class="pn">Spike</span><span class="pd">Stop the clock now. Costs a down.</span></button>`);
-    const cats = ['My Plays', 'Run', 'Wildcat', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
+    const cats = ['My Plays', 'Run', 'Goal Line', 'Wildcat', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
     cards = specials.join('') + cats.map(c => { const ps = OFF_PLAYS.filter(p => (p.cat || 'Pass') === c); if (!ps.length) return ''; return `<div class="pc-sec" data-cat="${c}" ${PC_TAB !== 'All' && PC_TAB !== c ? 'hidden' : ''}><h3 class="pc-cat">${c === 'Trick' ? 'Trick plays' : c === 'RPO' ? 'RPOs' : c} <span class="muted small">${ps.length}</span></h3>` + ps.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'off')}<span class="tag">${c}</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('') + '</div>'; }).join('');
   } else {
     cards = DEF_PLAYS.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'def')}<span class="tag">Defense</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('');
@@ -5433,7 +5477,7 @@ function showPlayCall(mode, audible) {
   el.innerHTML = `<div class="pc-inner wrap"><div class="pc-head"><h2>${audible ? 'Audible' : mode === 'off' ? 'Call your play' : 'Call your defense'}</h2><span class="pill amber">${sit}</span><span class="grow"></span>
     <button class="btn sm" data-act="call-auto">Ask coach</button><button class="btn sm" data-act="sim-drive">Sim this drive</button>${mode === 'def' ? '<button class="btn sm primary" data-act="offense-only-now">Offense only from now on</button>' : ''}<button class="btn sm ghost" data-act="sim-game-rest">Sim rest of game</button></div>
     ${clockBar(lg, mode)}
-    ${mode === 'off' ? `<div class="pc-tabs">${['All', ...(OFF_PLAYS.some(p => p.custom) ? ['My Plays'] : []), 'Run', 'Wildcat', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'].map(t => `<button class="tab ${PC_TAB === t ? 'on' : ''}" data-act="pc-tab" data-cat="${t}">${t === 'Trick' ? 'Trick plays' : t}</button>`).join('')}</div>` : ''}
+    ${mode === 'off' ? `<div class="pc-tabs">${['All', ...(OFF_PLAYS.some(p => p.custom) ? ['My Plays'] : []), 'Run', 'Goal Line', 'Wildcat', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'].map(t => `<button class="tab ${PC_TAB === t ? 'on' : ''}" data-act="pc-tab" data-cat="${t}">${t === 'Trick' ? 'Trick plays' : t}</button>`).join('')}</div>` : ''}
     <div class="plays">${cards}</div></div>`;
   el.hidden = false;
 }
@@ -6250,7 +6294,7 @@ LiveGame.prototype.aiCarrier = function (e, dt) {
   let best = null, bs = -1e9;
   for (let a = -80; a <= 80; a += 10) {
     const ang = a * Math.PI / 180, ux = Math.cos(ang) * dir, uy = Math.sin(ang);
-    let s = Math.cos(ang) * 3;
+    let s = Math.cos(ang) * (this._fwdW || 3);
     const px = e.x + ux * 4, py = e.y + uy * 4;
     const edgeDist = Math.min(py, FIELD_W - py);
     if (edgeDist < 2.2) s -= wantOut ? 0 : 5 + (2.2 - edgeDist) * 4; // the sideline is a defender
@@ -6267,5 +6311,1130 @@ LiveGame.prototype.aiCarrier = function (e, dt) {
   }
   this.steerDir(e, best[0], best[1], 0.93, dt);
 };
+
+// ============================================================
+// Gridiron Dynasty - outside run blocking: on tosses, sweeps, jet and
+// speed option the line steps playside, the TE seals the edge, receivers
+// stalk the corner and safety, and free blockers climb to linebackers.
+// ============================================================
+'use strict';
+
+const LR = LiveGame.prototype;
+
+// figure out which way an outside run is going (once), from the play design or the carrier's path
+LR.runSide = function () {
+  const pl = this.play; if (pl.rside !== undefined) return pl.rside;
+  const op = this.offPlay, car = this.carrier(); if (!car) return 0;
+  if (car === this.passer && !pl.handoff && !this.qbRunMode && !op.directSnap) return 0;
+  const steps = (car === this.O.RB && op.path) || (car.task && car.task.k === 'path' && car.task.pts && null) || op.carrierPath || op.jetPath || op.qbPath;
+  let dy = 0;
+  let flip = false;
+  if (steps) { for (const s of steps) dy += s[1]; for (const s of steps) if (Math.abs(s[1]) >= 1.5 && Math.sign(s[1]) !== Math.sign(dy)) flip = true; }
+  if (flip) { pl.rside = 0; return 0; } // counters / cutbacks are gap runs, not perimeter runs
+  else if (car.task && car.task.pts && car.task.pts.length) dy = car.task.pts[car.task.pts.length - 1][1] - this.gs.ballY;
+  if (Math.abs(dy) < 4.5 && Math.abs(car.vy) > 3 && Math.abs(car.y - this.gs.ballY) > 3) dy = car.vy;
+  const v = Math.abs(dy) >= 4.5 ? Math.sign(dy) : 0;
+  if (v || this.t > 1.2) pl.rside = v; // decide once the real carrier shows the direction
+  return v;
+};
+
+const _aiRunBlockRF = LR.aiRunBlock, _aiEscortRF = LR.aiEscort;
+LR.aiRunBlock = function (e, dt) { if (!this.rfBlock(e, dt)) _aiRunBlockRF.call(this, e, dt); };
+LR.aiEscort = function (e, dt) { if (e.role === 'QB' || !this.rfBlock(e, dt)) _aiEscortRF.call(this, e, dt); };
+LR.rfBlock = function (e, dt) {
+  const car = this.carrier();
+  if (!car || car === e || car.side !== 'O' || e.side !== 'O' || this.play.int || this.play.thrown || this.play.caught) return false;
+  const side = this.runSide();
+  if (!side) return false;
+  // keep a live assignment, otherwise pick the best playside threat nobody else has
+  let tgt = e.rf;
+  const valid = d => d && !d.unblocked && d.freeT <= 0 && this.dist(d, e) < 11 && (!d.eng || d.eng === e) && d.x > Math.min(e.x, car.x) - 3;
+  if (!valid(tgt)) {
+    const claimed = new Set(); for (const o of this.ents) if (o !== e && o.side === 'O' && o.rf) claimed.add(o.rf);
+    const isOL = e.role.startsWith('OL'), wide = e.role.startsWith('WR');
+    let best = null, bs = 1e9;
+    for (const d of this.ents) {
+      if (d.side !== 'D' || d.unblocked || d.freeT > 0 || (d.eng && d.eng !== e)) continue;
+      if (d.x < Math.min(e.x, car.x) - 3) continue; // already beaten / behind the play
+      const lat = (d.y - e.y) * side; // >0: defender is playside of me
+      let s = this.dist(d, e);
+      if (lat < -1.2) s += isOL ? 6 : 3;              // backside guys are someone else's problem
+      if (claimed.has(d)) s += 7;                      // no double teams
+      if (wide && (d.role.startsWith('CB') || d.role.startsWith('S'))) s -= 2.5; // stalk the DBs
+      if (isOL && d.role.startsWith('LB') && !this.ents.some(x => x.side === 'D' && x.role.startsWith('DL') && !x.eng && this.dist(x, e) < 2.5)) s -= 1; // climb
+      // the man who can actually make the tackle matters most
+      if ((d.y - car.y) * side > -2 && d.x > car.x - 1) s -= 1.5;
+      if (s < bs) { bs = s; best = d; }
+    }
+    e.rf = tgt = best;
+  }
+  if (!tgt) { this.steer(e, e.x + 2, e.y + side * 2, 0.7, dt); return true; }
+  // get between the defender and the carrier, shaded inside so the runner has the edge
+  const dx = tgt.x - car.x, dy = tgt.y - car.y, m = Math.hypot(dx, dy) || 1;
+  this.steer(e, tgt.x - dx / m * 0.9, tgt.y - dy / m * 0.9 - side * 0.35, 1, dt);
+  return true;
+};
+
+// carriers on outside runs: once past the edge, get vertical
+const _aiCarrierRF = LR.aiCarrier;
+LR.aiCarrier = function (e, dt) {
+  const side = e.side === 'O' && !this.play.caught && !this.play.int ? this.runSide() : 0;
+  if (side && e.x > this.los - 1.5 && Math.abs(e.y - this.gs.ballY) > 6) {
+    // look for the alley: closest unblocked defender ahead
+    const thr = this.ents.filter(d => d.side === 'D' && !d.eng && d.x > e.x - 1 && this.dist(d, e) < 6);
+    if (!thr.length) return this.steerDir(e, 0.94, side * 0.34, 0.97, dt);
+  }
+  this._fwdW = side && e.x > this.los - 2 ? 5.5 : 3; // downhill once he reaches the line
+  _aiCarrierRF.call(this, e, dt); this._fwdW = 3;
+};
+
+// ============================================================
+// Gridiron Dynasty - pre-snap: receiver motion (shows man vs zone),
+// goal line package, defensive adjustments (show blitz, press/off,
+// line shift) and a pass-rush move for the user's defender.
+// ============================================================
+'use strict';
+
+const LPS = LiveGame.prototype;
+
+// ---------- goal line package ----------
+FORMS.goalline = { QB: [-1.4, 0], RB: [-6.4, 0], WR1: [-1, -8.5], WR2: [-1, 8.5], WR3: [-1.3, -4.3], TE: [-1.3, 4.3] };
+const GL_PLAYS = [
+  { id: 'gldive', name: 'Goal Line Dive', type: 'run', cat: 'Goal Line', form: 'goalline', path: [[1.5, 0.4], [3, 1], [8, 1.2]], desc: 'Two tight ends, hit it straight ahead.' },
+  { id: 'gltoss', name: 'Goal Line Toss', type: 'run', cat: 'Goal Line', form: 'goalline', toss: true, path: [[1.2, 3], [2.4, 6.5], [10, 8.5]], desc: 'Pitch it to the edge behind the tight ends.' },
+  { id: 'glsneak', name: 'QB Sneak (heavy)', type: 'qbrun', cat: 'Goal Line', form: 'goalline', qbPath: [[1.2, 0], [5, 0]], routes: {}, desc: 'Under center, push the pile.' },
+  { id: 'glpa', name: 'PA Tight End Flat', type: 'pass', cat: 'Goal Line', form: 'goalline', pa: true, routes: { TE: 'flat', WR3: 'drag', WR1: 'corner', WR2: 'slant', RB: 'block' }, desc: 'Sell the dive, the tight end leaks to the flat.' },
+  { id: 'glfade', name: 'Goal Line Fade', type: 'pass', cat: 'Goal Line', form: 'goalline', quick: true, routes: { WR1: 'go', WR2: 'slant', WR3: 'flat', TE: 'block', RB: 'block' }, desc: 'Back-shoulder fade to your best receiver.' },
+];
+for (const p of GL_PLAYS) { OFF_PLAYS.push(p); if (p.type !== 'run' && p.type !== 'pass') NEW_PLAYS.push(p); }
+DEF_PLAYS.push({ id: 'goalline', name: 'Goal Line D', desc: 'Everyone on the line. Stop the run at the 1.', a: { LB1: 'f', LB2: 'f', CB1: 'm:WR1', CB2: 'm:WR2', CB3: 'm:WR3', S1: 'm:TE', S2: 'f' } });
+
+const _cpuDefCallPS = cpuDefCall;
+cpuDefCall = function (gs) {
+  if (gs.yard >= 95 && gs.togo <= 3 && chance(0.65)) return DEF_PLAYS.find(p => p.id === 'goalline');
+  return _cpuDefCallPS(gs);
+};
+const _cpuOffCallPS = cpuOffCall;
+cpuOffCall = function (gs) {
+  if (gs.yard >= 96 && gs.togo <= 3 && chance(0.45)) return pick(GL_PLAYS);
+  const p = _cpuOffCallPS(gs);
+  return p && p.cat === 'Goal Line' && gs.yard < 90 ? OFF_PLAYS.find(x => x.id === 'dive') : p;
+};
+
+const _setupPS = LPS.setup;
+LPS.setup = function () {
+  _setupPS.call(this);
+  this.motion = null; this.defAdj = { blitz: false, press: false, shift: 0 };
+  if (this.defPlay && this.defPlay.id === 'goalline') {
+    for (const e of this.ents) if (e.side === 'D' && !e.role.startsWith('DL') && e.task.k !== 'man') { e.x = this.los + (e.role.startsWith('S') ? 3.5 : 2.2); }
+    for (const e of this.D.CB) e.x = this.los + 1.6;
+  }
+};
+
+// ---------- motion ----------
+LPS.canMotion = function () {
+  if (this.phase !== 'pre' || !this.userOnOffense() || this.motion) return false;
+  return !!this.motionMan();
+};
+LPS.motionMan = function () {
+  const O = this.O, op = this.offPlay;
+  if (op.form === 'wildcat' || op.directSnap) return null;
+  for (const k of ['WR3', 'TE', 'WR2', 'WR1']) { const e = O[k]; if (e && e.task && (e.task.k === 'route' || e.task.k === 'block' || e.task.k === 'pblock')) return e; }
+  return null;
+};
+LPS.startMotion = function () {
+  if (!this.canMotion()) return false;
+  const e = this.motionMan(), by = this.gs.ballY;
+  // go across the formation to a mirrored spot (slot on the other side)
+  const ty = clamp(by - (e.y - by) * 0.55, 3, FIELD_W - 3);
+  this.motion = { e, ty, x: this.los - 1.6, t: 0 };
+  const shadow = this.ents.find(d => d.side === 'D' && d.task && d.task.k === 'man' && d.task.tgt === e);
+  this.motion.shadow = shadow || null;
+  sfx && sfx('snap');
+  return true;
+};
+LPS.stepMotion = function (dt) {
+  const m = this.motion; if (!m || m.done) return;
+  const e = m.e; m.t += dt;
+  const dy = m.ty - e.y, sp = Math.min(e.maxV * 0.82, 8);
+  if (Math.abs(dy) < 0.3) { e.vx = 0; e.vy = 0; m.done = true; }
+  else { e.vy = Math.sign(dy) * sp; e.vx = (m.x - e.x) * 4; e.y += e.vy * dt; e.x += e.vx * dt; }
+  // man defender travels with him; zone defenders just bump over
+  if (m.shadow) { const d = m.shadow; d.y += (e.y + (e.y < this.gs.ballY ? 1 : -1) - d.y) * Math.min(1, dt * 5); }
+  else for (const d of this.ents) if (d.side === 'D' && d.task && d.task.k === 'zone' && !d.task.deep) d.y += Math.sign(dy) * dt * 0.8;
+  if (!m.told && m.t > 0.45) {
+    m.told = true;
+    this.h.toast && this.h.toast(m.shadow ? `MAN coverage — ${m.shadow.role.replace(/\d/, '')} #${m.shadow.p.num} followed him across` : 'ZONE coverage — nobody followed the motion');
+  }
+};
+const _updatePS = LPS.update;
+LPS.update = function (dt) {
+  if (this.phase === 'pre' && this.motion) this.stepMotion(dt);
+  return _updatePS.call(this, dt);
+};
+const _snapPS = LPS.snap;
+LPS.snap = function () {
+  const m = this.motion, wasPre = this.phase === 'pre';
+  if (wasPre && m) {
+    const e = m.e, by = this.gs.ballY;
+    if (e.task && e.task.k === 'route') { e.task.pts = this.routePts(e.task.name, e.x, e.y, by); e.task.i = 0; }
+    if (!m.done) e.jetBoost = 0.6; // snapped while moving: a running start
+    if (m.shadow && m.shadow.task.k === 'man') m.shadow.x = this.los + 4;
+  }
+  if (wasPre) this.applyDefAdj();
+  return _snapPS.call(this);
+};
+
+// ---------- defensive adjustments ----------
+LPS.applyDefAdj = function () {
+  const a = this.defAdj; if (!a || a.applied) return; a.applied = true;
+  if (a.press) for (const c of this.D.CB) if (c.task.k === 'man') { const r = c.task.tgt; if (r && r.task.k === 'route' && chance(0.35 + (c.r.str + c.r.cov - r.r.str - r.r.rte) / 220)) { r.stun = 0.28 + Math.random() * 0.2; r.jammed = true; } }
+};
+LPS.defAdjust = function (kind) {
+  if (this.phase !== 'pre' || !this.userOnDefense()) return;
+  const a = this.defAdj, los = this.los;
+  if (kind === 'blitz') {
+    a.blitz = !a.blitz;
+    for (const s of this.D.S) if (s.task.k !== 'man' || a.blitz) s.x = a.blitz ? los + 6.5 : los + 13;
+    this.h.toast && this.h.toast(a.blitz ? 'Showing blitz: safeties walked down. They still play their call.' : 'Safeties back deep.');
+  } else if (kind === 'press') {
+    a.press = !a.press;
+    for (const c of this.D.CB) c.x = a.press ? los + 1.2 : los + 6.5;
+    this.h.toast && this.h.toast(a.press ? 'Press coverage: jam them at the line (risky vs speed).' : 'Off coverage: corners play soft.');
+  } else if (kind === 'left' || kind === 'right') {
+    const s = kind === 'left' ? -1 : 1; if (Math.abs(a.shift + s) > 2) return; a.shift += s;
+    for (const d of this.D.DL) d.y = clamp(d.y + s * 0.9, 2, FIELD_W - 2);
+    for (const d of this.D.LB) d.y = clamp(d.y + s * 0.6, 2, FIELD_W - 2);
+    this.assignBlocks();
+    this.h.toast && this.h.toast(`Line shifted ${a.shift < 0 ? 'left' : a.shift > 0 ? 'right' : 'back to normal'}.`);
+  }
+};
+
+// ---------- pass rush move ----------
+const _liveStepPS = LPS.liveStep;
+LPS.liveStep = function (dt) {
+  const c = this.ctrl, inp = this.input;
+  if (c && c.side === 'D' && c.eng && inp.actionEdge && this.userOnDefense()) {
+    inp.actionEdge = false;
+    if ((c.moveCd || 0) <= this.t) {
+      c.moveCd = this.t + 1.1;
+      const bl = c.eng, pass = !this.isRunPhase();
+      const p = clamp(0.32 + ((pass ? c.r.prs : c.r.str) - bl.r.rbk) / 140 + (c.r.agi - 70) / 400, 0.1, 0.75);
+      if (chance(p)) {
+        bl.eng = null; c.eng = null; c.freeT = 1.2; bl.stun = 0.45;
+        const dx = (this.carrier() || this.O.QB).x - c.x; c.vx += Math.sign(dx) * 2;
+        this.h.toast && this.h.toast(pick(['Swim move — he\'s through!', 'Spin move — free!', 'Rip move — beat him!', 'Bull rush — walked him back!']), 1200);
+      } else this.h.toast && this.h.toast('Rush move stopped. Try again in a second.', 1000);
+    }
+  }
+  // a running start for a receiver snapped in motion
+  for (const e of this.ents) if (e.jetBoost > 0) { e.jetBoost -= dt; e.vx += dt * 6; }
+  return _liveStepPS.call(this, dt);
+};
+
+// ============================================================
+// Gridiron Dynasty - weather: rain, snow, wind, domes. Affects passing,
+// catching, footing, fumbles and kicks in both the live game and the sim.
+// ============================================================
+'use strict';
+
+const DOMES = ['ATL', 'DET', 'MIN', 'NO', 'LV', 'ARI', 'DAL', 'HOU', 'IND', 'LAR', 'LAC'];
+const COLD = ['BUF', 'GB', 'CHI', 'CLE', 'PIT', 'NE', 'NYJ', 'NYG', 'DEN', 'KC', 'CIN', 'BAL', 'PHI', 'WAS'];
+const WETTER = ['SEA', 'SF', 'JAX', 'MIA', 'TB', 'CAR', 'TEN'];
+const WX = {
+  dome: { name: 'Dome', icon: '🏟', pass: 0, kick: 0, spd: 0, fum: 1 },
+  clear: { name: 'Clear', icon: '☀️', pass: 0, kick: 0, spd: 0, fum: 1 },
+  rain: { name: 'Rain', icon: '🌧', pass: 5, kick: 5, spd: 1, fum: 2.2 },
+  snow: { name: 'Snow', icon: '❄️', pass: 6, kick: 8, spd: 3, fum: 2.4 },
+  wind: { name: 'Windy', icon: '💨', pass: 4, kick: 11, spd: 0, fum: 1.1 },
+};
+let WX_NOW = 'clear';
+
+function rollWeather(L, hid) {
+  const t = L.teams[hid], ab = t.abbr || '', wk = L.week || 0;
+  const dome = DOMES.includes(ab) || (!L.real && hid % 6 === 5);
+  if (dome) return { k: 'dome', temp: 72 };
+  const cold = COLD.includes(ab) || (!L.real && hid % 4 === 0), late = wk >= 11 || L.phase === 'playoffs';
+  const r = Math.random();
+  let k = 'clear';
+  if (cold && late && r < 0.28) k = 'snow';
+  else if (r < (WETTER.includes(ab) ? 0.2 : 0.12) + (cold && late ? 0.28 : 0)) k = 'rain';
+  else if (r < (cold && late ? 0.28 : 0) + 0.22) k = 'wind';
+  const base = late ? (cold ? 30 : 58) : wk >= 6 ? (cold ? 48 : 70) : 78;
+  return { k, temp: Math.round(k === 'snow' ? Math.min(base, 28) - randi(0, 10) : base + randi(-8, 8)) };
+}
+
+const _newGSW = newGameState;
+newGameState = function (L, hid, aid, opts = {}) {
+  const gs = _newGSW(L, hid, aid, opts);
+  gs.weather = opts.weather || rollWeather(L, hid);
+  const w = WX[gs.weather.k];
+  if (w.pass || w.spd) for (const rt of gs.rt) { rt.pass -= w.pass; rt.run -= w.spd * 0.6; rt.kick -= w.kick; rt.kac -= w.kick; rt.kpw -= w.kick * 0.5; }
+  WX_NOW = gs.weather.k;
+  return gs;
+};
+const _fgProbW = fgProb;
+fgProb = function (k, dist) { const w = WX[WX_NOW] || WX.clear; return clamp(_fgProbW(k, dist) * (1 - w.kick / 100 * (dist > 40 ? 1.6 : 1)), 0, 0.99); };
+function wxLabel(gs) { if (!gs || !gs.weather) return ''; const w = WX[gs.weather.k]; return `${w.icon} ${w.name}${gs.weather.k === 'dome' ? '' : ' · ' + gs.weather.temp + '°F'}`; }
+
+// live engine: slick ball and slow footing
+const _mkEntW = LiveGame.prototype.mkEnt;
+LiveGame.prototype.mkEnt = function (p, side, role, x, y) {
+  const e = _mkEntW.call(this, p, side, role, x, y);
+  const w = WX[(this.gs.weather || {}).k] || WX.clear;
+  if (w.pass) { e.r.tha -= w.pass; e.r.cat -= Math.round(w.pass * 0.8); }
+  if (w.spd) { e.maxV -= w.spd * 0.06; e.acc -= w.spd * 0.4; }
+  if (w.kick) { e.r.kac -= w.kick; e.r.kpw -= Math.round(w.kick * 0.5); }
+  return e;
+};
+const _startLiveW = LiveGame.prototype.next;
+LiveGame.prototype.next = function () { WX_NOW = (this.gs.weather || {}).k || 'clear'; return _startLiveW.call(this); };
+
+// fumbles on contact (more in the wet)
+const _endPlayW = LiveGame.prototype.endPlay;
+LiveGame.prototype.endPlay = function (kind, msg) {
+  const c = this.carrier(), pl = this.play, gs = this.gs;
+  if (this.phase === 'live' && kind === 'tackle' && c && c.side === 'O' && !pl.int && !this.ret && c.x < 109.5) {
+    const w = WX[(gs.weather || {}).k] || WX.clear;
+    const p = 0.0075 * w.fum * clamp((110 - c.r.btk) / 50, 0.5, 1.6) * (this.tackler && this.tackler.dive > 0 ? 1.4 : 1);
+    if (chance(p)) {
+      sfx('whistle');
+      st(gs, c.p, 'fum');
+      if (chance(0.52)) {
+        const rec = this.tackler || this.nearest(c, 'D');
+        const x = c.x; if (this.tackler) st(gs, this.tackler.p, 'tk');
+        if (rec) st(gs, rec.p, 'ff');
+        logp(gs, `${pshort(c.p)} FUMBLES! Recovered by ${rec ? pshort(rec.p) : 'the defense'}.`, true);
+        gs.ballY = clamp(c.y, HASH_L, HASH_R);
+        applyPlay(gs, { turnover: { yard: Math.round(110 - x), td: false }, elapsed: Math.max(3, Math.min(this.t, 14)) });
+        return this.result('FUMBLE!', `${pshort(c.p)} coughs it up${w.fum > 1.5 ? ' on the slick field' : ''} — ${rec ? pshort(rec.p) : 'defense'} recovers`, true);
+      }
+      this.h.toast && this.h.toast(`${pshort(c.p)} fumbled — but fell on it!`);
+    }
+  }
+  return _endPlayW.call(this, kind, msg);
+};
+
+// ---------- visuals: rain / snow over the field, weather chip ----------
+let WXFX = null;
+function wxLoop() {
+  const cv = document.getElementById('wxfx');
+  if (!cv || typeof GAME === 'undefined' || !GAME || !GAME.gs.weather) { WXFX = null; if (cv) cv.style.display = 'none'; return; }
+  const k = GAME.gs.weather.k;
+  if (k !== 'rain' && k !== 'snow') { cv.style.display = 'none'; WXFX = null; return; }
+  cv.style.display = 'block';
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  if (!WXFX || WXFX.k !== k) WXFX = { k, p: Array.from({ length: k === 'rain' ? 220 : 160 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: 0.5 + Math.random() })) };
+  const ctx = cv.getContext('2d'); ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(200,215,235,.45)'; ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1;
+  for (const d of WXFX.p) {
+    if (k === 'rain') { d.y += 16 * d.s; d.x -= 3 * d.s; ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + 3 * d.s, d.y - 12 * d.s); ctx.stroke(); }
+    else { d.y += 1.4 * d.s; d.x += Math.sin((d.y + d.s * 100) / 30) * 0.6; ctx.beginPath(); ctx.arc(d.x, d.y, 1.3 * d.s + 0.4, 0, 6.3); ctx.fill(); }
+    if (d.y > H + 10) { d.y = -10; d.x = Math.random() * W; } if (d.x < -10) d.x = W + 5;
+  }
+  if (k === 'snow') { ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fillRect(0, 0, W, H); }
+  requestAnimationFrame(wxLoop);
+}
+
+// ============================================================
+// Gridiron Dynasty - playable kickoff and punt returns, onside kicks.
+// When the user's team receives, the return is played live: blockers set
+// a wall, the coverage team runs down, and you steer the returner.
+// ============================================================
+'use strict';
+
+const RET_PLAY = { id: 'ret', name: 'Return', type: 'run', form: 'single', path: [[0.5, 0]], desc: '' };
+
+// kickoffs: the user's team receiving gets a live return (touchbacks stay touchbacks)
+const _kickoffR = kickoff;
+kickoff = function (gs, recv, silent) {
+  const kick = 1 - recv;
+  // onside kicks: the user's toggle, or the CPU late and behind
+  const late = gs.quarter >= 4 && gs.clock < 150, behind = gs.score[kick] < gs.score[recv] && gs.score[recv] - gs.score[kick] <= 16;
+  const userOnside = gs.onside && gs.onside[kick];
+  const cpuOnside = !silent && late && behind && kick !== gs.liveUser && (gs.liveUser == null || gs.liveUser >= 0) && chance(0.85);
+  if (!silent && (userOnside || cpuOnside)) {
+    if (gs.onside) gs.onside[kick] = false;
+    const got = chance(0.14);
+    if (got) { setBall(gs, kick, 45); logp(gs, `ONSIDE KICK — ${teamAbbr(gs, kick)} RECOVERS!`, true); gs.onsideMsg = { title: 'ONSIDE KICK RECOVERED!', sub: `${teamAbbr(gs, kick)} keeps the ball`, big: true }; }
+    else { setBall(gs, recv, 55); logp(gs, `Onside kick recovered by ${teamAbbr(gs, recv)}.`); gs.onsideMsg = { title: 'Onside kick fails', sub: `${teamAbbr(gs, recv)} recovers at the ${yardStr(gs, 55)}`, big: false }; }
+    return;
+  }
+  if (silent || gs.liveUser == null || recv !== gs.liveUser || chance(0.55)) return _kickoffR(gs, recv, silent);
+  const land = randi(-3, 12); // where it comes down (receiving team's yard line; <0 = end zone)
+  setBall(gs, recv, 30);
+  logp(gs, `${teamAbbr(gs, kick)} kicks off.`);
+  gs.retPending = { kind: 'ko', land };
+};
+
+const _doPuntR = doPunt;
+doPunt = function (gs) {
+  const off = gs.poss, def = 1 - off;
+  if (gs.liveUser == null || def !== gs.liveUser) return _doPuntR(gs);
+  const pp = gs.lu[off].P[0];
+  const dist = Math.round(clamp(gauss(42 + (pp.r.kpw - 70) / 3, 6), 25, 68));
+  const land = gs.yard + dist;
+  if (land >= 100 || chance(0.25)) return _doPuntR(gs); // touchback / out of bounds / downed: just simulate it
+  st(gs, pp, 'punts'); st(gs, pp, 'puntyds', dist);
+  logp(gs, `${teamAbbr(gs, off)} punts ${dist} yds.`);
+  setBall(gs, def, 100 - land);
+  runClock(gs, 6);
+  gs.retPending = { kind: 'punt', land: 100 - land };
+};
+
+const LRT = LiveGame.prototype;
+const _nextR = LRT.next;
+LRT.next = function () {
+  const gs = this.gs;
+  if (gs.onsideMsg && !gs.over) { const m = gs.onsideMsg; gs.onsideMsg = null; this.ents = []; this.ball = null; this.phase = 'call'; this.result(m.title, m.sub, m.big); return; }
+  if (gs.retPending && !gs.over && this.user >= 0) { const r = gs.retPending; gs.retPending = null; return this.startReturn(r); }
+  gs.retPending = null;
+  return _nextR.call(this);
+};
+
+LRT.startReturn = function (r) {
+  const gs = this.gs, recv = gs.poss;
+  this.offPlay = RET_PLAY; this.defPlay = DEF_PLAYS[0];
+  this.setup();
+  const O = this.O, D = this.D, landX = 10 + r.land;
+  this.los = landX; this.firstX = landX;
+  const ret = O.RB;
+  const kr = gs.lu[recv].RB[1] && !gs.lu[recv].RB[1].scrub ? gs.lu[recv].RB[1] : gs.lu[recv].WR[2];
+  if (kr && !kr.scrub) ret.p = kr;
+  ret.x = landX; ret.y = clamp(MID_Y + gauss(0, 4), 8, FIELD_W - 8); ret.vx = 0; ret.vy = 0;
+  // blockers form a wall in front of the returner
+  const blockers = this.ents.filter(e => e.side === 'O' && e !== ret);
+  const cover = this.ents.filter(e => e.side === 'D');
+  const gap = r.kind === 'punt' ? 7 : 19;
+  blockers.forEach((e, i) => { e.x = landX + gap + (i % 2) * 2.5 + randi(0, 2); e.y = 4 + i * (FIELD_W - 8) / (blockers.length - 1); e.task = { k: 'block' }; e.vx = 0; e.vy = 0; });
+  cover.forEach((e, i) => { const fast = e.role.startsWith('CB') || e.role.startsWith('S'); e.x = landX + (r.kind === 'punt' ? (fast ? 11 : 17) : (fast ? 33 : 38)) + Math.random() * 4; e.y = 3 + i * (FIELD_W - 6) / (cover.length - 1); e.task = { k: 'fill' }; e.vx = -6; e.vy = 0; e.read = 0; e.react = 0.1; const tired = r.kind === 'punt' ? 0.93 : 0.86; e.maxV *= tired; e.acc *= tired; });
+  this.ball = { state: 'held', holder: ret, x: ret.x, y: ret.y, z: 0 };
+  this.passer = ret; this.passReady = false; this.runBlocking = true;
+  this.play = { thrown: false, caught: false, handoff: true, crossed: true, int: false, target: null, airYds: 0, rusher: ret, result: null, sackable: false, scramble: false, decided: true };
+  this.ret = { kind: r.kind, recv, land: r.land, x0: landX };
+  ret.task = { k: 'path', pts: [[landX + 6, ret.y]], i: 0 };
+  this.ctrl = this.userOnOffense() ? ret : null;
+  this.cam.x = landX + 8; this.cam.y = ret.y;
+  this.phase = 'live'; this.t = 0;
+  this.h.toast && this.h.toast(r.kind === 'punt' ? 'Punt return! Run it back — or press T for a fair catch.' : r.land < 0 ? 'Kick in the end zone: run it out, or press T to take a knee.' : 'Kickoff return! Find a crease.');
+  this.h.update && this.h.update();
+};
+
+// T (throw-away key) = fair catch / take a knee at the start of a return
+const _liveStepR = LRT.liveStep;
+LRT.liveStep = function (dt) {
+  if (this.ret && (this.input.throwAway || this.input.sw) && this.t < 0.8) { this.input.throwAway = false; this.input.sw = false; return this.endReturn('fair'); }
+  if (this.ret) { this.input.throwTo = null; this.input.throwAway = false; }
+  return _liveStepR.call(this, dt);
+};
+const _endPlayR = LRT.endPlay;
+LRT.endPlay = function (kind, msg) {
+  if (this.ret && this.phase === 'live') return this.endReturn(kind);
+  return _endPlayR.call(this, kind, msg);
+};
+LRT.endReturn = function (kind) {
+  const gs = this.gs, r = this.ret, c = this.carrier() || this.O.RB, recv = r.recv; this.ret = null;
+  sfx('whistle');
+  const elapsed = Math.max(2, Math.min(this.t, 10));
+  if (kind === 'td') {
+    st(gs, c.p, 'kr'); st(gs, c.p, 'kry', Math.round(110 - r.x0)); st(gs, c.p, 'krtd');
+    gs.score[recv] += 6; logp(gs, `${r.kind === 'punt' ? 'PUNT' : 'KICKOFF'} RETURN TOUCHDOWN by ${pshort(c.p)}!`, true);
+    runClock(gs, elapsed); pat(gs, recv); checkOT(gs); if (!gs.over) kickoff(gs, 1 - recv);
+    sfx('td');
+    return this.result(`${r.kind === 'punt' ? 'PUNT' : 'KICK'} RETURN TD!`, `${pshort(c.p)} takes it all the way`, true);
+  }
+  let yard;
+  if (kind === 'fair') yard = r.land <= 0 ? (r.kind === 'punt' ? 20 : 30) : r.land;
+  else yard = Math.round(c.x - 10);
+  if (yard <= 0) yard = r.kind === 'punt' ? 20 : 30; // downed in the end zone
+  yard = clamp(yard, 1, 99);
+  const yds = Math.max(0, yard - Math.max(0, r.land));
+  if (kind !== 'fair') { st(gs, c.p, r.kind === 'punt' ? 'pr' : 'kr'); st(gs, c.p, r.kind === 'punt' ? 'pry' : 'kry', yds); if (this.tackler) st(gs, this.tackler.p, 'tk'); }
+  gs.poss = recv; gs.yard = yard; gs.down = 1; gs.togo = Math.min(10, 100 - yard); gs.ballY = clamp(c.y, HASH_L, HASH_R);
+  runClock(gs, kind === 'fair' ? 0 : elapsed); gs.lastRunoff = 0;
+  logp(gs, kind === 'fair' ? (r.land <= 0 ? 'Touchback.' : 'Fair catch.') : `${pshort(c.p)} returns it ${yds} yds to the ${yardStr(gs, yard)}${kind === 'oob' ? ', out of bounds' : ''}.`, yds >= 35);
+  return this.result(kind === 'fair' ? (r.land <= 0 ? 'Touchback' : 'Fair catch') : `Return of ${yds}`, kind === 'fair' ? '' : `${pshort(c.p)} to the ${yardStr(gs, yard)}`, yds >= 40);
+};
+
+// user game setup + onside toggle
+const _startLiveR = startLiveGame;
+startLiveGame = function (hid, aid, userTid, opts = {}) {
+  _startLiveR(hid, aid, userTid, opts);
+  if (GAME) { GAME.gs.liveUser = GAME.live.user; GAME.gs.onside = [false, false]; }
+};
+const _simRestR = simRestOfGame;
+simRestOfGame = function () { if (GAME) GAME.gs.liveUser = null; return _simRestR(); };
+
+// ============================================================
+// Gridiron Dynasty - owner mode, coaching staff, player morale /
+// holdouts / trade requests, in-game injuries + injury report,
+// trade deadline notice.
+// ============================================================
+'use strict';
+
+// ---------------- owner ----------------
+const OWN_UP = { seats: ['Expand seating', 60, '+4,000 seats per level'], lux: ['Luxury suites', 45, 'More revenue per home game'], fan: ['Fan zone', 30, 'Fans grow happier every week'], train: ['Training facility', 50, 'Young players develop faster'] };
+const RELOCATE = ['London', 'Toronto', 'Mexico City', 'San Antonio', 'Portland', 'St. Louis', 'Oklahoma City', 'Salt Lake City', 'Orlando', 'Columbus', 'Austin', 'Vancouver', 'San Diego', 'Oakland'];
+function ownerOf(L) {
+  if (!L.owner) L.owner = { cash: 80, ticket: 110, fans: 62, lv: { seats: 0, lux: 0, fan: 0, train: 0 }, hist: [], season: { rev: 0, exp: 0 } };
+  return L.owner;
+}
+function ownerCapacity(o) { return 65000 + o.lv.seats * 4000; }
+function ownerDemand(L, o) {
+  const t = L.teams[L.userTid], gp = t.w + t.l + t.t, wp = gp ? (t.w + t.t * 0.5) / gp : 0.5;
+  return clamp(0.5 + o.fans / 260 + wp * 0.22 - (o.ticket - 100) / 380, 0.28, 1);
+}
+function ownerWeek(L, homeGame, won) {
+  const o = ownerOf(L), t = L.teams[L.userTid];
+  let rev = capOf(L) / weeksOf(L) * 0.8, exp = payrollOf(L, t) / weeksOf(L) + 0.6 + Object.values(o.lv).reduce((a, b) => a + b, 0) * 0.15 + staffCost(L) / weeksOf(L);
+  let att = 0;
+  if (homeGame) { att = Math.round(ownerCapacity(o) * ownerDemand(L, o)); rev += att * o.ticket / 1e6 + att * (16 + o.lv.lux * 5) / 1e6 + o.lv.lux * 0.9 + o.fans * 0.02; }
+  o.cash = Math.round((o.cash + rev - exp) * 10) / 10;
+  o.season.rev += rev; o.season.exp += exp;
+  o.fans = clamp(o.fans + (won === true ? 1.4 : won === false ? -1.1 : 0) + o.lv.fan * 0.3 - Math.max(0, o.ticket - 135) / 40, 5, 100);
+  o.last = { att, rev: Math.round(rev * 10) / 10, exp: Math.round(exp * 10) / 10, home: homeGame };
+}
+function payrollOf(L, t) { return t.roster.reduce((s, id) => s + (L.players[id].con ? L.players[id].con.sal : 0), 0); }
+function viewOwner() {
+  const L = LEAGUE, o = ownerOf(L), t = UT(), dem = ownerDemand(L, o);
+  const ups = Object.entries(OWN_UP).map(([k, [n, base, d]]) => { const lv = o.lv[k], cost = base * (lv + 1); return `<div class="own-up"><div class="grow"><b>${n}</b> <span class="muted small">Level ${lv}/3</span><div class="small muted">${d}</div></div>${lv >= 3 ? '<span class="pill green">Maxed</span>' : `<button class="btn sm" data-act="own-up" data-k="${k}" ${o.cash >= cost ? '' : 'disabled'}>Upgrade $${cost}M</button>`}</div>`; }).join('');
+  return `<div class="cols"><div class="card"><h2>Owner's office</h2>
+      <div class="own-stats"><div><span class="muted small">Cash</span><b class="${o.cash < 0 ? 'neg' : ''}">$${o.cash.toFixed(1)}M</b></div><div><span class="muted small">Fan happiness</span><b>${Math.round(o.fans)}</b></div><div><span class="muted small">Stadium</span><b>${ownerCapacity(o).toLocaleString()}</b></div><div><span class="muted small">Projected crowd</span><b>${Math.round(dem * 100)}%</b></div></div>
+      <label class="small" style="display:block;margin-top:10px">Average ticket price: <b id="tkVal">$${o.ticket}</b><input type="range" min="50" max="250" step="5" value="${o.ticket}" data-act="own-ticket" style="width:100%"></label>
+      <p class="muted small">Higher prices make more per fan but empty seats and annoy fans. Winning fills the stadium.</p>
+      ${o.last ? `<p class="small">Last week: ${o.last.home ? `${o.last.att.toLocaleString()} fans · ` : 'road game · '}revenue $${o.last.rev}M · costs $${o.last.exp}M</p>` : ''}
+      <p class="small">This season: revenue <b>$${o.season.rev.toFixed(1)}M</b> · costs <b>$${o.season.exp.toFixed(1)}M</b></p></div>
+    <div class="card"><h2>Stadium upgrades</h2>${ups}</div></div>
+    <div class="card"><h2>Relocate or rebrand</h2><p class="small muted">Moving costs $150M and resets fan happiness to 55. Rebranding costs $20M.</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><select id="relCity">${RELOCATE.map(c => `<option>${c}</option>`).join('')}</select><button class="btn sm" data-act="own-move" ${o.cash >= 150 ? '' : 'disabled'}>Move the ${esc(t.name)}</button>
+      <input id="relName" placeholder="New nickname" maxlength="16"><button class="btn sm" data-act="own-rename" ${o.cash >= 20 ? '' : 'disabled'}>Rebrand</button></div></div>`;
+}
+
+// ---------------- coaching staff ----------------
+const SPECS = { qbdev: ['QB guru', 'OC', ['QB']], skill: ['Skill-position coach', 'OC', ['RB', 'WR', 'TE']], ol: ['O-line guru', 'OC', ['OL']], offscheme: ['Play designer', 'OC', []],
+  rush: ['Pass-rush specialist', 'DC', ['DL', 'LB']], dbs: ['Secondary coach', 'DC', ['CB', 'S']], defscheme: ['Defensive mastermind', 'DC', []] };
+function genCoach(role) {
+  const specs = Object.keys(SPECS).filter(k => SPECS[k][1] === role);
+  const ovr = clamp(Math.round(gauss(72, 8)), 55, 94);
+  return { name: pick(FIRST) + ' ' + pick(LAST), role, age: randi(34, 64), ovr, spec: pick(specs), sal: Math.round((0.8 + (ovr - 55) / 9) * 10) / 10 };
+}
+function staffOf(L, tid) {
+  L.staff = L.staff || {};
+  if (!L.staff[tid]) L.staff[tid] = { oc: genCoach('OC'), dc: genCoach('DC') };
+  return L.staff[tid];
+}
+function staffCost(L) { const s = staffOf(L, L.userTid); return (s.oc ? s.oc.sal : 0) + (s.dc ? s.dc.sal : 0); }
+function coachPool(L) { if (!L.coachPool || !L.coachPool.length) L.coachPool = [...Array(5)].map(() => genCoach('OC')).concat([...Array(5)].map(() => genCoach('DC'))); return L.coachPool; }
+function coachLine(c) { return c ? `<b>${esc(c.name)}</b> <span class="muted small">${c.age}y</span> ${ovrTag(c.ovr)} <span class="pill">${SPECS[c.spec][0]}</span> <span class="muted small">$${c.sal}M/yr</span>` : '<span class="muted">Vacant</span>'; }
+function viewStaff() {
+  const L = LEAGUE, s = staffOf(L, L.userTid), t = UT();
+  const pool = coachPool(L);
+  const row = (c, i) => `<tr><td>${c.role}</td><td>${coachLine(c)}</td><td class="small muted">${SPECS[c.spec][2].length ? 'Develops ' + SPECS[c.spec][2].join('/') : c.role === 'OC' ? 'Boosts the whole offense' : 'Boosts the whole defense'}</td><td class="r"><button class="btn sm" data-act="staff-hire" data-i="${i}">Hire</button></td></tr>`;
+  return `<div class="cols"><div class="card"><h2>${esc(t.name)} staff</h2>
+      <div class="staff-row"><span class="pos-chip">HC</span> <b>${esc(t.coach || 'You')}</b> <span class="muted small">head coach</span></div>
+      <div class="staff-row"><span class="pos-chip">OC</span> ${coachLine(s.oc)}</div><div class="staff-row"><span class="pos-chip">DC</span> ${coachLine(s.dc)}</div>
+      <p class="muted small">Coordinators add to game-day ratings (better coach, bigger boost) and speed up development for their specialty. Win a lot and other teams will try to hire them away as head coaches.</p></div>
+    <div class="card"><h2>Available coordinators</h2><div class="tbl-wrap"><table class="t"><tbody>${pool.map(row).join('')}</tbody></table></div><p class="muted small">Hiring replaces your current coach in that role. Salary comes out of the owner's cash.</p></div></div>`;
+}
+const _newGSStaff = newGameState;
+newGameState = function (L, hid, aid, opts = {}) {
+  const gs = _newGSStaff(L, hid, aid, opts);
+  [hid, aid].forEach((tid, side) => {
+    const s = staffOf(L, tid), rt = gs.rt[side];
+    if (s.oc) { const b = (s.oc.ovr - 70) / 9 * (s.oc.spec === 'offscheme' ? 1.6 : 1); rt.pass += b; rt.run += b; }
+    if (s.dc) { const b = (s.dc.ovr - 70) / 9 * (s.dc.spec === 'defscheme' ? 1.6 : 1); rt.cover += b; rt.rush += b * 0.7; rt.rundef += b * 0.7; }
+    if (tid === L.userTid) { const ch = teamChem(L); rt.pass += ch; rt.run += ch; rt.cover += ch; rt.rundef += ch; }
+  });
+  return gs;
+};
+const _progressStaff = progressPlayer;
+progressPlayer = function (p) {
+  const r = _progressStaff(p);
+  const L = typeof LEAGUE !== 'undefined' ? LEAGUE : null;
+  if (!L || p.tid == null || p.tid < 0 || p.age > 31) return r;
+  const s = staffOf(L, p.tid); let bonus = 0;
+  for (const c of [s.oc, s.dc]) if (c && SPECS[c.spec][2].includes(p.pos)) bonus += 0.6 + (c.ovr - 70) / 18;
+  if (p.tid === L.userTid && L.owner) bonus += L.owner.lv.train * 0.35;
+  if (bonus > 0.2) { for (const k in OVR_W[p.pos]) p.r[k] = Math.min(99, p.r[k] + bonus * (0.6 + Math.random() * 0.8)); p.ovr = calcOvr(p); }
+  return r;
+};
+
+// ---------------- morale, holdouts, trade requests ----------------
+const mor = p => p.morale == null ? 70 : p.morale;
+function teamChem(L) {
+  const t = L.teams[L.userTid]; if (!t) return 0;
+  const ids = POSITIONS.flatMap(pos => (t.depth[pos] || []).slice(0, STARTERS[pos]));
+  if (!ids.length) return 0;
+  const avg = ids.reduce((s, id) => s + mor(L.players[id]), 0) / ids.length;
+  return clamp((avg - 65) / 8, -2.5, 2.5);
+}
+function underpaid(p) { return p.ovr >= 80 && p.con && p.con.sal < marketSalary(p) * 0.6; }
+function moraleWeek(L, won) {
+  const t = L.teams[L.userTid];
+  const starters = new Set(POSITIONS.flatMap(pos => (t.depth[pos] || []).slice(0, STARTERS[pos])));
+  for (const id of t.roster) {
+    const p = L.players[id]; let m = mor(p);
+    m += won === true ? 1.8 : won === false ? -1.6 : 0;
+    if (starters.has(id)) m += 0.6; else if (p.ovr >= 76) m -= 1.4;
+    if (underpaid(p)) m -= 0.9;
+    m += (70 - m) * 0.04;
+    p.morale = clamp(Math.round(m * 10) / 10, 0, 100);
+    if (p.holdout && (p.con.sal >= marketSalary(p) * 0.8 || L.week > 6)) {
+      p.holdout = false; p.morale = clamp(p.morale + (L.week > 6 ? -10 : 15), 0, 100);
+      addNews(L, `${p.pos} ${pname(p)} ${L.week > 6 ? 'ends his holdout and reports, unhappy' : 'ends his holdout after his new deal'}.`);
+    }
+    if (!p.tradeReq && p.morale < 30 && p.ovr >= 72) { p.tradeReq = true; addNews(L, `😠 ${p.pos} ${pname(p)} has requested a trade.`); }
+    else if (p.tradeReq && p.morale > 52) { p.tradeReq = false; addNews(L, `${p.pos} ${pname(p)} withdraws his trade request.`); }
+  }
+}
+// holdouts can't play
+const _lineupMor = lineup;
+lineup = function (L, t, extra) {
+  const hold = t.id === L.userTid ? t.roster.map(id => L.players[id]).filter(p => p.holdout && !p.inj) : [];
+  for (const p of hold) p.inj = 99;
+  try { return _lineupMor(L, t, extra); } finally { for (const p of hold) p.inj = 0; }
+};
+const _startNewSeasonMor = startNewSeason;
+startNewSeason = function (L) {
+  _startNewSeasonMor(L);
+  const t = L.teams[L.userTid]; if (!t) return;
+  ownerOf(L).season = { rev: 0, exp: 0 };
+  for (const id of t.roster) {
+    const p = L.players[id];
+    if (p.ovr >= 84 && p.con && p.con.yrs <= 1 && underpaid(p) && chance(0.5) && !p.star) { p.holdout = true; p.morale = Math.min(mor(p), 40); addNews(L, `💼 ${p.pos} ${pname(p)} is HOLDING OUT for a new contract. Extend him in Contracts to end it.`); }
+  }
+};
+
+// weekly hooks
+const _simWeekF2 = simWeek;
+simWeek = function (L, includeUser) {
+  const wk0 = L.week, ph0 = L.phase;
+  const g = ph0 === 'regular' ? (L.schedule[wk0 - 1] || []).find(x => x.h === L.userTid || x.a === L.userTid) : null;
+  const r = _simWeekF2(L, includeUser);
+  if (ph0 === 'regular' && L.week !== wk0) {
+    const won = g && g.hs != null ? (g.h === L.userTid ? g.hs > g.as : g.as > g.hs) : null;
+    ownerWeek(L, !!(g && g.h === L.userTid), won);
+    moraleWeek(L, won);
+    if (wk0 === 10) addNews(L, '⏰ The trade deadline has passed. No more trades until the offseason.');
+  }
+  return r;
+};
+
+// offseason: coordinators get poached, bad head coaches get fired
+const _beginOffF2 = beginOffseason;
+beginOffseason = function (L) {
+  _beginOffF2(L);
+  L.coachPool = [];
+  for (const t of L.teams) {
+    const s = staffOf(L, t.id);
+    for (const role of ['oc', 'dc']) {
+      const c = s[role]; if (!c) continue;
+      c.age++; c.ovr = clamp(c.ovr + randi(-2, 3) - (c.age > 62 ? 2 : 0), 50, 96);
+      if (t.w >= 11 && c.ovr >= 78 && chance(0.35)) {
+        addNews(L, `${t.abbr} ${role.toUpperCase()} ${c.name} is hired as a head coach elsewhere.`);
+        s[role] = t.id === L.userTid ? null : genCoach(c.role);
+      }
+    }
+    if (t.id !== L.userTid && t.w <= 4 && chance(0.5)) {
+      const old = t.coach; t.coach = pick(FIRST) + ' ' + pick(LAST);
+      addNews(L, `${t.abbr} fires head coach ${old || 'their head coach'}; ${t.coach} takes over.`);
+      s.oc = genCoach('OC'); s.dc = genCoach('DC');
+    }
+  }
+  const us = staffOf(L, L.userTid);
+  if (!us.oc || !us.dc) addNews(L, `⚠ Your staff has a vacancy — hire a coordinator in the Staff tab.`);
+};
+
+// ---------------- in-game injuries ----------------
+const INJ = [['ankle sprain', 1, 2], ['hamstring', 1, 3], ['knee', 2, 6], ['shoulder', 1, 4], ['concussion', 1, 2], ['ribs', 1, 3], ['high ankle sprain', 3, 6], ['torn ACL', 12, 17]];
+const _endPlayInj = LiveGame.prototype.endPlay;
+LiveGame.prototype.endPlay = function (kind, msg) {
+  const was = this.phase, c = this.carrier(), tk = this.tackler;
+  const r = _endPlayInj.call(this, kind, msg);
+  if (was === 'live' && kind === 'tackle' && c) {
+    for (const [e, p0] of [[c, 0.0055], [tk, 0.0025]]) if (e && e.p && !e.p.scrub && !e.p.star && chance(p0)) this.injure(e);
+  }
+  return r;
+};
+LiveGame.prototype.injure = function (e) {
+  const L = this.L, p = e.p, gs = this.gs;
+  const side = gs.lu[0][p.pos] && gs.lu[0][p.pos].includes(p) ? 0 : gs.lu[1][p.pos] && gs.lu[1][p.pos].includes(p) ? 1 : -1; if (side < 0) return;
+  const [type, lo, hi] = weighted(INJ, x => x[1] >= 12 ? 0.4 : 3);
+  p.inj = randi(lo, hi) + 1; p.injType = type;
+  const t = L.teams[gs.tids[side]], used = new Set(Object.values(gs.lu[side]).flat().map(x => x.id));
+  const sub = (t.depth[p.pos] || []).map(id => L.players[id]).find(x => x && !x.inj && !used.has(x.id) && !x.holdout);
+  const arr = gs.lu[side][p.pos], i = arr.indexOf(p);
+  if (sub) arr[i] = sub;
+  logp(gs, `INJURY: ${pshort(p)} (${type}) is out.`);
+  this.h.toast && this.h.toast(`🚑 ${t.abbr} ${p.pos} ${pshort(p)} is hurt (${type}, ~${p.inj - 1} wk).${sub ? ` ${pshort(sub)} comes in.` : ''}`);
+  if (t.id === L.userTid) addNews(L, `🚑 ${p.pos} ${pname(p)} suffered a ${type} — out about ${p.inj - 1} week${p.inj - 1 === 1 ? '' : 's'}.`);
+};
+
+// ---------------- Locker Room tab ----------------
+function viewLocker() {
+  const L = LEAGUE, t = UT(), ch = teamChem(L);
+  const ps = t.roster.map(id => L.players[id]).sort((a, b) => b.ovr - a.ovr);
+  const inj = ps.filter(p => p.inj > 0);
+  const flags = p => [p.holdout ? '<span class="pill red">Holdout</span>' : '', p.tradeReq ? '<span class="pill red">Wants trade</span>' : '', underpaid(p) ? '<span class="pill amber">Underpaid</span>' : ''].join(' ');
+  const face = m => m >= 80 ? '😄' : m >= 60 ? '🙂' : m >= 40 ? '😐' : m >= 25 ? '😕' : '😠';
+  return `<div class="cols"><div class="card"><h2>Team chemistry</h2><div class="chem"><b class="${ch >= 0 ? 'pos' : 'neg'}">${ch >= 0 ? '+' : ''}${ch.toFixed(1)}</b><span class="muted small">game-day rating bonus from your starters' morale</span></div>
+      <p class="muted small">Winning, playing time and fair contracts keep players happy. Unhappy stars ask for trades; underpaid stars in their last year can hold out.</p>
+      <h2 style="margin-top:12px">Injury report</h2>${inj.length ? `<div class="tbl-wrap"><table class="t"><tbody>${inj.map(p => `<tr><td>${p.pos}</td><td>${esc(pname(p))}</td><td class="small">${esc(p.injType || 'injury')}</td><td class="r">${p.inj >= 90 ? '—' : p.inj + ' wk'}${p.ir ? ' <span class="pill">IR</span>' : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted small">Everyone is healthy.</p>'}</div>
+    <div class="card"><h2>Morale</h2><div class="tbl-wrap"><table class="t"><thead><tr><th>Pos</th><th>Player</th><th class="r">OVR</th><th class="r">Morale</th><th></th></tr></thead><tbody>${ps.map(p => `<tr class="click" data-act="player" data-pid="${p.id}"><td>${p.pos}</td><td>${esc(pname(p))}</td><td class="r">${ovrTag(p.ovr)}</td><td class="r num">${face(mor(p))} ${Math.round(mor(p))}</td><td>${flags(p)}</td></tr>`).join('')}</tbody></table></div></div></div>`;
+}
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el || !LEAGUE) return;
+  const L = LEAGUE, a = el.dataset.act;
+  if (a === 'own-up') { const o = ownerOf(L), k = el.dataset.k, cost = OWN_UP[k][1] * (o.lv[k] + 1); if (o.cash < cost || o.lv[k] >= 3) return; o.cash -= cost; o.lv[k]++; addNews(L, `🏗 ${OWN_UP[k][0]} upgraded to level ${o.lv[k]}.`); save(); renderHub(); toast('Upgrade complete.'); }
+  if (a === 'own-move') { const o = ownerOf(L), city = $('#relCity').value, t = UT(); if (o.cash < 150) return; if (!confirm(`Move the ${t.name} to ${city}?`)) return; o.cash -= 150; o.fans = 55; const old = t.city; t.city = city; addNews(L, `🚚 The ${t.name} relocate from ${old} to ${city}!`); save(); renderHub(); }
+  if (a === 'own-rename') { const o = ownerOf(L), n = ($('#relName').value || '').trim().slice(0, 16), t = UT(); if (!n || o.cash < 20) return; o.cash -= 20; const old = t.name; t.name = n; addNews(L, `🎨 The ${t.city} ${old} rebrand as the ${t.city} ${n}.`); save(); renderHub(); }
+  if (a === 'staff-hire') { const pool = coachPool(L), c = pool[+el.dataset.i]; if (!c) return; const s = staffOf(L, L.userTid), k = c.role === 'OC' ? 'oc' : 'dc'; const old = s[k]; s[k] = c; pool.splice(+el.dataset.i, 1); if (old) pool.push(old); addNews(L, `📋 You hire ${c.name} as ${c.role}.`); save(); renderHub(); toast(`${c.name} hired.`); }
+});
+document.addEventListener('input', e => {
+  if (e.target.dataset && e.target.dataset.act === 'own-ticket' && LEAGUE) { ownerOf(LEAGUE).ticket = +e.target.value; const v = document.getElementById('tkVal'); if (v) v.textContent = '$' + e.target.value; }
+});
+document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.act === 'own-ticket' && LEAGUE) { save(); renderHub(); } });
+
+// ============================================================
+// Gridiron Dynasty - Superstar mode: create one player and play only his
+// snaps. Earn XP from games, spend points on ratings, chase goals/awards.
+// Works on top of a franchise (you still run the team).
+// ============================================================
+'use strict';
+
+const SS_POS = ['QB', 'RB', 'WR', 'TE', 'DL', 'LB', 'CB', 'S'];
+const SS_OFF = ['QB', 'RB', 'WR', 'TE'];
+const SS_GOALS = {
+  QB: [['py', 4000, 'Pass for 4,000 yards'], ['ptd', 30, 'Throw 30 touchdowns'], ['wins', 11, 'Win 11 games']],
+  RB: [['ry', 1200, 'Rush for 1,200 yards'], ['rtd', 12, 'Score 12 rushing TDs'], ['rec', 40, 'Catch 40 passes']],
+  WR: [['rcy', 1200, '1,200 receiving yards'], ['rctd', 10, '10 receiving TDs'], ['rec', 85, '85 catches']],
+  TE: [['rcy', 800, '800 receiving yards'], ['rctd', 8, '8 receiving TDs'], ['rec', 65, '65 catches']],
+  DL: [['sk', 12, 'Record 12 sacks'], ['tk', 50, 'Make 50 tackles'], ['ff', 3, 'Force 3 fumbles']],
+  LB: [['tk', 120, 'Make 120 tackles'], ['sk', 6, 'Record 6 sacks'], ['dint', 2, 'Grab 2 interceptions']],
+  CB: [['dint', 5, 'Grab 5 interceptions'], ['pd', 14, 'Defend 14 passes'], ['tk', 60, 'Make 60 tackles']],
+  S: [['dint', 4, 'Grab 4 interceptions'], ['tk', 90, 'Make 90 tackles'], ['pd', 10, 'Defend 10 passes']],
+};
+const SS_KEYS = { QB: ['tha', 'thp', 'awr', 'spd', 'agi'], RB: ['spd', 'agi', 'btk', 'cat', 'str', 'awr'], WR: ['spd', 'cat', 'rte', 'agi', 'btk', 'awr'], TE: ['cat', 'rte', 'rbk', 'str', 'spd', 'awr'],
+  DL: ['prs', 'str', 'spd', 'tkl', 'agi', 'awr'], LB: ['tkl', 'awr', 'spd', 'cov', 'prs', 'str'], CB: ['cov', 'spd', 'agi', 'awr', 'cat', 'tkl'], S: ['cov', 'tkl', 'spd', 'awr', 'agi', 'cat'] };
+const SS_NAMES = { spd: 'Speed', str: 'Strength', agi: 'Agility', awr: 'Awareness', thp: 'Throw power', tha: 'Throw accuracy', cat: 'Catching', rte: 'Route running', btk: 'Break tackle', rbk: 'Blocking', prs: 'Pass rush', tkl: 'Tackling', cov: 'Coverage', kpw: 'Kick power', kac: 'Kick accuracy' };
+
+function ssPlayer(L) { return L && L.superstar && L.players[L.superstar.pid]; }
+function ssCreate(L, first, last, pos) {
+  const t = L.teams[L.userTid];
+  const p = genPlayer(L, pos, 70, 22);
+  p.first = first || 'Your'; p.last = last || 'Player'; p.age = 22; p.dev = 'X'; p.num = jerseyNum(pos); p.col = 'Superstar';
+  p.con = { sal: 1.2, yrs: 4 }; p.st = {}; p.career = []; p.star = true;
+  addToTeam(L, p, L.userTid);
+  t.depth[pos] = [p.id, ...(t.depth[pos] || []).filter(id => id !== p.id)];
+  L.superstar = { pid: p.id, xp: 0, pts: 6, spent: 0, lvl: 1, log: [] };
+  addNews(L, `⭐ Superstar mode: ${pos} ${pname(p)} joins the ${t.name} as a rookie starter.`);
+  return p;
+}
+function ssLevel(xp) { return 1 + Math.floor(Math.sqrt(xp / 45)); } // each level takes longer
+function ssNext(xp) { const l = ssLevel(xp); return l * l * 45 - xp; }
+function ssXP(p, b, won) {
+  let x = 20 + (won ? 30 : 0);
+  if (p.pos === 'QB') x += (b.py || 0) * 0.1 + (b.ptd || 0) * 20 - (b.pint || 0) * 15 + (b.ry || 0) * 0.2 + (b.rtd || 0) * 20;
+  else if (SS_OFF.includes(p.pos)) x += ((b.ry || 0) + (b.rcy || 0)) * 0.2 + (b.rec || 0) * 3 + ((b.rtd || 0) + (b.rctd || 0)) * 25;
+  else x += (b.tk || 0) * 8 + (b.sk || 0) * 25 + (b.dint || 0) * 35 + (b.pd || 0) * 8 + (b.ff || 0) * 20;
+  return Math.max(10, Math.round(x));
+}
+function ssGrant(L, xp, why) {
+  const s = L.superstar; s.xp += xp;
+  const lvl = ssLevel(s.xp);
+  if (lvl > s.lvl) { s.pts += (lvl - s.lvl) * 2; s.lvl = lvl; addNews(L, `⭐ Level ${lvl}! You earned upgrade points.`); }
+  s.log.unshift({ s: L.season, w: L.week, xp, why }); s.log.length = Math.min(s.log.length, 30);
+}
+
+// XP from every game the star plays (live or simulated)
+const _recordGameSS = recordGame;
+recordGame = function (L, g, res) {
+  _recordGameSS(L, g, res);
+  const p = ssPlayer(L); if (!p || !res.box || !res.box[p.id]) return;
+  const home = g.h === p.tid, won = home ? g.hs > g.as : g.as > g.hs;
+  if (g.h !== p.tid && g.a !== p.tid) return;
+  ssGrant(L, ssXP(p, res.box[p.id], won), `${home ? 'vs' : '@'} ${L.teams[home ? g.a : g.h].abbr}${won ? ' (W)' : ''}`);
+};
+// season goals pay out at the end of the season
+const _computeAwardsSS = computeAwards;
+computeAwards = function (L) {
+  _computeAwardsSS(L);
+  const p = ssPlayer(L); if (!p) return;
+  const t = L.teams[p.tid] || { w: 0 };
+  let n = 0;
+  for (const [k, need] of SS_GOALS[p.pos]) if ((k === 'wins' ? t.w : (p.st[k] || 0)) >= need) n++;
+  if (n) ssGrant(L, n * 300, `${n} season goal${n > 1 ? 's' : ''} reached`);
+  const aw = L.awards[0]; if (aw) for (const k of ['mvp', 'opoy', 'dpoy', 'roy']) if (aw[k] && aw[k].id === p.id) ssGrant(L, 800, k.toUpperCase() + '!');
+};
+
+// ---------- live game: you only play your guy ----------
+const LSS = LiveGame.prototype;
+LSS.starEnt = function () {
+  const p = ssPlayer(this.L); if (!p || p.tid !== this.teamOf(this.user).id) return null;
+  return this.ents.find(e => e.p && e.p.id === p.id) || null;
+};
+LSS.starMode = function () {
+  const p = ssPlayer(this.L); if (!p || this.user < 0 || p.inj || p.tid !== this.teamOf(this.user).id) return null;
+  const lu = this.gs.lu[this.user]; if (!(lu[p.pos] || []).some(x => x.id === p.id)) return null;
+  return SS_OFF.includes(p.pos) ? (p.pos === 'QB' ? 'qb' : 'off') : 'def';
+};
+const _nextSS = LSS.next;
+LSS.next = function () {
+  const gs = this.gs, mode = this.starMode();
+  if (!mode || gs.over || gs.retPending || gs.onsideMsg) return _nextSS.call(this);
+  const off = gs.poss, mine = off === this.user;
+  if ((mode !== 'def' && !mine) || (mode === 'def' && mine)) { // the other unit's snaps are simulated
+    this.ents = []; this.ball = null; this.phase = 'call';
+    const before = gs.score.slice(); simDrive(gs);
+    const d = gs.score[off] - before[off];
+    this.h.toast && this.h.toast(`${this.teamOf(off).abbr} drive ${d >= 6 ? 'ends in a TOUCHDOWN' : d === 3 ? 'ends in a field goal' : 'is stopped'}. You're up.`);
+    this.h.update && this.h.update();
+    setTimeout(() => this.next(), 60); return;
+  }
+  if (mode === 'off') { // coach calls the play, you play your position
+    this.ents = []; this.ball = null; this.phase = 'call';
+    const id = autoOffCall(gs); const pl = OFF_PLAYS.concat(SPECIAL_PLAYS).find(p => p.id === id);
+    this.h.toast && this.h.toast(`Coach's call: ${pl ? pl.name : id}`);
+    return this.choose(id);
+  }
+  if (mode === 'def') {
+    this.ents = []; this.ball = null; this.phase = 'call';
+    const dec = cpuDecision(gs); if (dec !== 'go') return this.choose(null);
+    const dp = cpuDefCall(gs); this.h.toast && this.h.toast(`Defensive call: ${dp.name}`);
+    return this.choose(dp.id);
+  }
+  return _nextSS.call(this); // QB: you call the plays
+};
+const _updateSS = LSS.update;
+LSS.update = function (dt) {
+  if (this.phase === 'pre' && this.starMode() === 'off' && this.userOnOffense() && this.preT > 1.3) this.snap();
+  return _updateSS.call(this, dt);
+};
+const _liveStepSS = LSS.liveStep;
+LSS.liveStep = function (dt) {
+  const s = this.starMode() ? this.starEnt() : null;
+  if (s) {
+    if (this.ctrl !== s && (s.side === 'O') === this.userOnOffense()) this.ctrl = s;
+    const inp = this.input, pl = this.play, car = this.carrier();
+    // receivers: press the action button to call for the ball
+    if (inp.actionEdge && s.side === 'O' && car !== s && car === this.passer && this.passReady && !pl.thrown && this.eligible.includes(s)) {
+      inp.actionEdge = false;
+      const open = this.openness ? this.openness(s) : 1;
+      if (open > 0.9 || chance(0.35)) { this.throwBall(s); this.h.toast && this.h.toast('QB heard you — ball\'s coming!', 1200); }
+      else this.h.toast && this.h.toast('Covered — the QB looks elsewhere.', 1200);
+    }
+    inp.sw = false;
+  }
+  return _liveStepSS.call(this, dt);
+};
+// the QB likes throwing to the star
+const _opennessSS = LSS.openness;
+LSS.openness = function (r) { const v = _opennessSS.call(this, r); const p = ssPlayer(this.L); return p && r.p && r.p.id === p.id && this.passer !== this.ctrl ? v + 0.7 : v; };
+
+// ---------- setup screen + My Player tab ----------
+const _setupGoSS = setupGo;
+setupGo = function () {
+  const on = document.getElementById('setSS') && document.getElementById('setSS').checked && SETUP.mode === 'franchise';
+  const first = on ? ($('#ssFirst').value || '').trim() : '', last = on ? ($('#ssLast').value || '').trim() : '', pos = on ? $('#ssPos').value : null;
+  _setupGoSS();
+  if (on && LEAGUE) { ssCreate(LEAGUE, first.slice(0, 16), last.slice(0, 18), pos); save(); TAB = 'star'; renderHub(); }
+};
+function ssCost(v) { return v < 80 ? 1 : v < 90 ? 2 : 3; }
+function viewStar() {
+  const L = LEAGUE, p = ssPlayer(L);
+  if (!p) return `<div class="card"><h2>Superstar mode</h2><p>Create your own player and play only his snaps — like a career mode. He starts as a 70 OVR rookie starter on your team, and you upgrade him with XP from games.</p>
+    <div class="row" style="gap:10px;flex-wrap:wrap"><input id="ssFirst2" placeholder="First name" maxlength="16"><input id="ssLast2" placeholder="Last name" maxlength="18">
+    <select id="ssPos2">${SS_POS.map(x => `<option>${x}</option>`).join('')}</select><button class="btn primary" data-act="ss-create">Create my player</button></div></div>`;
+  const s = L.superstar, need = ssNext(s.xp), t = L.teams[p.tid], span = (s.lvl * s.lvl - (s.lvl - 1) * (s.lvl - 1)) * 45;
+  const goals = SS_GOALS[p.pos].map(([k, n, label]) => { const v = k === 'wins' ? (t ? t.w : 0) : (p.st[k] || 0); return `<div class="goal"><div class="row"><span class="grow">${label}</span><b class="num">${v}/${n}</b></div><div class="bar"><i style="width:${Math.min(100, v / n * 100)}%"></i></div></div>`; }).join('');
+  const rows = SS_KEYS[p.pos].map(k => { const v = Math.round(p.r[k]), c = ssCost(v); return `<tr><td>${SS_NAMES[k]}</td><td class="r num"><b>${v}</b></td><td><div class="bar"><i style="width:${v}%"></i></div></td><td class="r"><button class="btn sm" data-act="ss-up" data-k="${k}" ${s.pts >= c && v < 99 ? '' : 'disabled'}>+1 <span class="muted small">(${c})</span></button></td></tr>`; }).join('');
+  const st = p.st || {}, statLine = SS_OFF.includes(p.pos) ? `${st.gp || 0} GP · ${p.pos === 'QB' ? `${st.pc || 0}/${st.pa || 0}, ${st.py || 0} yds, ${st.ptd || 0} TD, ${st.pint || 0} INT · ` : ''}${st.ra || 0} car ${st.ry || 0} yds · ${st.rec || 0} rec ${st.rcy || 0} yds · ${(st.rtd || 0) + (st.rctd || 0)} TD`
+    : `${st.gp || 0} GP · ${st.tk || 0} tkl · ${st.sk || 0} sk · ${st.dint || 0} INT · ${st.pd || 0} PD · ${st.ff || 0} FF`;
+  return `<div class="card ss-hero" style="--c1:${t ? t.c1 : '#333'}"><div class="ss-num">${p.num}</div><div class="grow"><div class="eyebrow">Superstar · ${t ? esc(teamName(t)) : 'Free agent'}</div>
+      <div class="hub-title">${esc(pname(p))}</div><div class="muted">${p.pos} · Age ${p.age} · Level ${s.lvl} · ${s.xp.toLocaleString()} XP (${need} to next level)</div>
+      <div class="bar xp"><i style="width:${clamp((span - need) / span * 100, 0, 100)}%"></i></div></div><div class="ring big" style="--v:${p.ovr}"><b>${p.ovr}</b><span>OVR</span></div></div>
+    <div class="cols"><div class="card"><h2>Upgrade ratings <span class="pill amber">${s.pts} point${s.pts === 1 ? '' : 's'}</span></h2><div class="tbl-wrap"><table class="t"><tbody>${rows}</tbody></table></div>
+      <p class="muted small">Each level = 2 points, and levels take more XP as you go. Points cost more as a rating gets higher.</p></div>
+      <div class="card"><h2>${L.season} season goals</h2>${goals}<p class="muted small">Each goal you hit pays 300 XP at the end of the season. Awards pay 800.</p>
+      <h2 style="margin-top:14px">This season</h2><p class="small">${statLine}</p>
+      <h2 style="margin-top:14px">Recent XP</h2>${s.log.slice(0, 8).map(x => `<div class="small"><b class="num">+${x.xp}</b> <span class="muted">${x.s} wk ${x.w}</span> ${esc(x.why)}</div>`).join('') || '<p class="muted small">Play a game to earn XP.</p>'}</div></div>
+    <div class="card"><h2>How it works</h2><p class="small">In games you only control ${esc(p.last)}. ${p.pos === 'QB' ? 'You call the plays and run the offense; the defense is simulated.' : SS_OFF.includes(p.pos) ? 'The coach calls the plays and the snap is automatic. Run your route — press the action button (SPACE) to call for the ball when you\'re open. The defense is simulated.' : 'The defensive coordinator calls the defense. You control your player on every snap; your offense is simulated.'} Games you sim also earn XP from his stats.</p></div>`;
+}
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el || !LEAGUE) return;
+  if (el.dataset.act === 'ss-up') {
+    const L = LEAGUE, p = ssPlayer(L), k = el.dataset.k, c = ssCost(p.r[k]); if (!p || L.superstar.pts < c || p.r[k] >= 99) return;
+    L.superstar.pts -= c; L.superstar.spent += c; p.r[k] = Math.min(99, Math.round(p.r[k]) + 1); p.ovr = calcOvr(p); save(); renderHub();
+  }
+  if (el.dataset.act === 'ss-create') { ssCreate(LEAGUE, ($('#ssFirst2').value || '').trim().slice(0, 16), ($('#ssLast2').value || '').trim().slice(0, 18), $('#ssPos2').value); save(); renderHub(); }
+});
+// select your player before the snap too
+const _setupSS = LSS.setup;
+LSS.setup = function () {
+  _setupSS.call(this);
+  if (this.starMode()) { const s = this.starEnt(); if (s && (s.side === 'O') === this.userOnOffense()) this.ctrl = s; }
+};
+
+// ============================================================
+// Gridiron Dynasty - presentation: play-by-play commentary ticker,
+// halftime report, fuller postgame box score, instant replay,
+// power rankings + playoff bracket, shareable custom plays.
+// ============================================================
+'use strict';
+
+// ---------------- commentary ----------------
+const CALL_LINES = {
+  td: ['TOUCHDOWN! {who} finds the end zone!', 'He is IN! Six for {team}!', 'Nobody touches {who} — touchdown {team}!', 'What a finish — {who} takes it to the house!'],
+  bigpass: ['{qb} lets it fly… CAUGHT! {who} for {y}!', 'Dime from {qb}! {who} hauls it in for {y}.', 'Big strike downfield — {y} yards to {who}.'],
+  pass: ['{qb} hits {who} for {y}.', 'Quick throw to {who}, picks up {y}.', '{who} with the grab, {y} yards.', 'Completion, {qb} to {who}.'],
+  bigrun: ['{who} breaks free! {y} yards on the run!', 'Daylight for {who} — {y} yards!', '{who} bounces it outside and he is GONE for {y}!'],
+  run: ['{who} pounds ahead for {y}.', '{who} on the carry, {y} yards.', 'Handoff to {who}, he picks up {y}.'],
+  stuff: ['{who} is stuffed at the line.', 'Nowhere to go for {who}.', 'Met in the backfield — {who} loses ground.'],
+  sack: ['SACKED! The pocket collapses on {qb}.', '{qb} goes down — the rush gets home!', 'No time to throw — {qb} is buried.'],
+  inc: ['Incomplete. {qb} couldn\'t connect.', 'Thrown behind the receiver — incomplete.', 'Broken up! Incomplete pass.', 'Off the fingertips. Incomplete.'],
+  int: ['PICKED OFF! {who} jumps the route!', 'Interception! {who} reads it all the way!', '{qb} throws it right to {who}! Turnover!'],
+  flag: ['Flag on the play — {t}.', 'Yellow laundry: {t}.'],
+  fumble: ['FUMBLE! The ball is loose — and the defense has it!', 'He coughs it up! Turnover!'],
+  ret: ['{t}.', 'The return: {t}.'],
+};
+function callLine(k, v) { return pick(CALL_LINES[k]).replace(/\{(\w+)\}/g, (_, x) => v[x] != null ? v[x] : ''); }
+function commentFor(lg, b) {
+  const gs = lg.gs, t = b.title || '', s = b.sub || '';
+  const team = teamAbbr(gs, gs.poss), qb = gs.lu[gs.poss].QB[0] ? pshort(gs.lu[gs.poss].QB[0]) : 'The QB';
+  const y = (t.match(/[-+]?\d+/) || [''])[0].replace('+', '');
+  const who = (s.match(/to (.+)$/) || s.match(/^(.+?) (run|scramble|picks|coughs|takes)/) || [, s.split(' ')[0]])[1];
+  if (/^FLAG/.test(t)) return callLine('flag', { t: t.replace('FLAG: ', '') });
+  if (/TOUCHDOWN|RETURN TD/.test(t)) return callLine('td', { who: who || 'He', team });
+  if (/INTERCEPTION|PICK SIX/.test(t)) return callLine('int', { who: (s.match(/^(.+?) picks/) || [, 'the defender'])[1], qb });
+  if (/FUMBLE/.test(t)) return callLine('fumble', {});
+  if (/SACKED/.test(t)) return callLine('sack', { qb });
+  if (/Incomplete|Thrown away/.test(t)) return callLine('inc', { qb });
+  if (/Pass complete/.test(t)) return callLine(+y >= 20 ? 'bigpass' : 'pass', { qb, who, y: y + (Math.abs(+y) === 1 ? ' yard' : ' yards') });
+  if (/Gain of|Loss of/.test(t)) { const n = /Loss/.test(t) ? -y : +y; return callLine(n >= 15 ? 'bigrun' : n <= 0 ? 'stuff' : 'run', { who, y: Math.abs(n) + (Math.abs(n) === 1 ? ' yard' : ' yards') }); }
+  if (/Return|Fair catch|Touchback/.test(t)) return callLine('ret', { t: t + (s ? ' — ' + s : '') });
+  return t + (s ? ' — ' + s : '');
+}
+const _showBannerP = showBanner;
+showBanner = function (b) {
+  _showBannerP(b);
+  if (!GAME) return;
+  const el = document.getElementById('ticker'); if (!el) return;
+  el.textContent = '🎙 ' + commentFor(GAME.live, b); el.hidden = false;
+  clearTimeout(showBanner._tk); showBanner._tk = setTimeout(() => el.hidden = true, 4200);
+};
+
+// ---------------- halftime ----------------
+function statTable(gs) {
+  const L = LEAGUE, tm = s => L.teams[gs.tids[s]], ts = gs.tstats;
+  const rows = [['Total yards', s => ts[s].yds], ['Passing', s => ts[s].pass], ['Rushing', s => ts[s].rush], ['First downs', s => ts[s].fd], ['Turnovers', s => ts[s].to], ['Penalties', s => gs.pens ? `${gs.pens[s][0]}-${gs.pens[s][1]}` : '0-0'], ['Timeouts left', s => gs.timeouts ? gs.timeouts[s] : '-']];
+  return `<table class="t box"><thead><tr><th></th><th class="r">${esc(tm(1).abbr)}</th><th class="r">${esc(tm(0).abbr)}</th></tr></thead><tbody>${rows.map(([n, f]) => `<tr><td>${n}</td><td class="r num">${f(1)}</td><td class="r num">${f(0)}</td></tr>`).join('')}</tbody></table>`;
+}
+function leadersHTML(gs) {
+  const L = LEAGUE, rows = [];
+  for (const side of [1, 0]) {
+    const ids = Object.keys(gs.box).map(Number).filter(id => { const p = L.players[id]; return p && p.tid === gs.tids[side]; });
+    const best = k => ids.map(id => [L.players[id], gs.box[id]]).filter(x => x[1][k]).sort((a, b) => b[1][k] - a[1][k])[0];
+    const q = best('py'), r = best('ry'), w = best('rcy'), d = best('tk');
+    rows.push(`<div><b>${esc(L.teams[gs.tids[side]].abbr)}</b>${q ? `<div class="small">${esc(pshort(q[0]))} ${q[1].pc || 0}/${q[1].pa || 0} ${q[1].py} yds ${q[1].ptd || 0} TD</div>` : ''}${r ? `<div class="small">${esc(pshort(r[0]))} ${r[1].ra} car ${r[1].ry} yds</div>` : ''}${w ? `<div class="small">${esc(pshort(w[0]))} ${w[1].rec} rec ${w[1].rcy} yds</div>` : ''}${d ? `<div class="small">${esc(pshort(d[0]))} ${d[1].tk} tkl${d[1].sk ? ' ' + d[1].sk + ' sk' : ''}</div>` : ''}</div>`);
+  }
+  return `<div class="cols">${rows.join('')}</div>`;
+}
+const _nextHalf = LiveGame.prototype.next;
+LiveGame.prototype.next = function () {
+  const gs = this.gs;
+  if (this.user >= 0 && !gs.over && gs.quarter === 3 && !this._halfShown && typeof GAME !== 'undefined' && GAME && GAME.live === this) {
+    this._halfShown = true;
+    const L = LEAGUE, tm = s => L.teams[gs.tids[s]];
+    const el = document.getElementById('halftime');
+    if (el) {
+      el.innerHTML = `<div class="final-inner wrap"><div class="eyebrow" style="text-align:center">Halftime</div>
+        <div class="final-score"><div>${badge(tm(1), 'lg')}</div><div class="big">${gs.score[1]} – ${gs.score[0]}</div><div>${badge(tm(0), 'lg')}</div></div>
+        <div class="cols"><div class="card"><h2>Team stats</h2>${statTable(gs)}</div><div class="card"><h2>First-half leaders</h2>${leadersHTML(gs)}</div></div>
+        <div style="text-align:center"><button class="btn primary" data-act="half-go">Start the second half</button></div></div>`;
+      el.hidden = false; GAME.paused = true; this._halfWait = true;
+      return;
+    }
+  }
+  return _nextHalf.call(this);
+};
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  if (el.dataset.act === 'half-go' && GAME) { document.getElementById('halftime').hidden = true; GAME.paused = false; GAME.live._halfWait = false; GAME.live.next(); }
+  if (el.dataset.act === 'replay' && GAME) GAME.live.startReplay();
+  if (el.dataset.act === 'onside-toggle' && GAME) { const g = GAME.gs, u = GAME.live.user; g.onside[u] = !g.onside[u]; toast(g.onside[u] ? 'Onside kick ON for your next kickoff.' : 'Onside kick off.'); showPlayCall(GAME.live.userOnOffense() ? 'off' : 'def'); }
+});
+
+// fuller postgame
+const _showFinalP = showFinal;
+showFinal = function () {
+  _showFinalP();
+  const gs = GAME.gs, inner = document.querySelector('#final .final-inner'); if (!inner) return;
+  const btn = inner.querySelector('[data-act="game-continue"]');
+  const box = document.createElement('div'); box.className = 'cols';
+  box.innerHTML = `<div class="card"><h2>Box score</h2>${statTable(gs)}${gs.weather ? `<p class="muted small">${wxLabel(gs)}</p>` : ''}</div><div class="card"><h2>Game leaders</h2>${leadersHTML(gs)}</div>`;
+  if (btn) btn.parentNode.parentNode.insertBefore(box, btn.parentNode); else inner.appendChild(box);
+};
+
+// ---------------- instant replay ----------------
+const LRP = LiveGame.prototype;
+const _liveStepRP = LRP.liveStep;
+LRP.liveStep = function (dt) {
+  if (this.t < dt * 1.5 || !this.rec) this.rec = [];
+  const r = _liveStepRP.call(this, dt);
+  if (this.rec.length < 1400) {
+    const b = this.ball;
+    this.rec.push({ e: this.ents.map(e => [e.x, e.y, e.vx, e.vy]), b: b ? [b.x, b.y, b.z, b.state, this.ents.indexOf(b.holder), b.tx, b.ty] : null, t: this.t });
+  }
+  return r;
+};
+const _resultRP = LRP.result;
+LRP.result = function (title, sub, big) {
+  _resultRP.call(this, title, sub, big);
+  const worth = big || /SACK|INTERCEPT|FUMBLE|FLAG|Return of [4-9]\d/.test(title) || /(\+|Gain of |Return of )(1[5-9]|[2-9]\d)/.test(title);
+  this.canReplay = !!(worth && this.rec && this.rec.length > 30 && this.user >= 0);
+  const btn = document.getElementById('replayBtn'); if (btn) btn.hidden = !this.canReplay;
+};
+LRP.startReplay = function () {
+  if (!this.canReplay || this.phase !== 'post') return;
+  this.canReplay = false; const rb = document.getElementById('replayBtn'); if (rb) rb.hidden = true;
+  this.replay = { i: 0, f: 0, save: this.ents.map(e => [e.x, e.y, e.vx, e.vy]), ball: this.ball ? Object.assign({}, this.ball) : null };
+  this.phase = 'replay'; this.h.toast && this.h.toast('▶ Instant replay (press SPACE to skip)');
+};
+const _updateRP = LRP.update;
+LRP.update = function (dt) {
+  if (this.phase !== 'replay') { const r = _updateRP.call(this, dt); if (this.phase !== 'post') { const btn = document.getElementById('replayBtn'); if (btn && !btn.hidden && this.phase !== 'post') btn.hidden = true; } return r; }
+  const rp = this.replay; rp.f += dt * 30; // half speed (recorded at 60/s)
+  const fr = this.rec[Math.min(this.rec.length - 1, Math.floor(rp.f))];
+  fr.e.forEach((v, i) => { const e = this.ents[i]; if (e) { e.x = v[0]; e.y = v[1]; e.vx = v[2]; e.vy = v[3]; } });
+  if (fr.b && this.ball) { const b = this.ball; b.x = fr.b[0]; b.y = fr.b[1]; b.z = fr.b[2]; b.state = fr.b[3] === 'air' || fr.b[3] === 'pitch' ? fr.b[3] : 'held'; b.holder = this.ents[fr.b[4]] || b.holder; b.tx = fr.b[5]; b.ty = fr.b[6]; }
+  const k = 1 - Math.exp(-dt * 4); const tx = this.ball ? this.ball.x : this.cam.x; this.cam.x += (tx - this.cam.x) * k; if (this.ball) this.cam.y += (this.ball.y - this.cam.y) * k;
+  if (rp.f >= this.rec.length + 20 || this.input.actionEdge) {
+    this.input.actionEdge = false;
+    rp.save.forEach((v, i) => { const e = this.ents[i]; if (e) { e.x = v[0]; e.y = v[1]; e.vx = v[2]; e.vy = v[3]; } });
+    if (rp.ball) this.ball = rp.ball;
+    this.replay = null; this.phase = 'post'; this.postT = 99; // continue to the next play
+  }
+};
+
+// ---------------- power rankings + playoff bracket ----------------
+function powerRanks(L) {
+  return L.teams.map(t => {
+    const gp = t.w + t.l + t.t, wp = gp ? (t.w + t.t * 0.5) / gp : 0.5, pd = gp ? (t.pf - t.pa) / gp : 0, o = teamOvr(L, t).ovr;
+    return { t, score: wp * 60 + pd * 1.1 + o * 0.55 * (gp < 4 ? 1.4 : 1) };
+  }).sort((a, b) => b.score - a.score);
+}
+const _simWeekPR = simWeek;
+simWeek = function (L, inc) {
+  const wk = L.week, ph = L.phase;
+  if (ph === 'regular') L.prPrev = Object.fromEntries(powerRanks(L).map((r, i) => [r.t.id, i + 1]));
+  return _simWeekPR(L, inc);
+};
+function prBlurb(L, r, i, mv) {
+  const t = r.t, gp = t.w + t.l + t.t;
+  if (!gp) return `Preseason: ${teamOvr(L, t).ovr} OVR roster.`;
+  const pd = t.pf - t.pa;
+  if (mv >= 4) return pick(['Surging — the hottest team in football.', 'Big jump after a statement week.', 'Rocketing up the board.']);
+  if (mv <= -4) return pick(['Free fall. Something has to change.', 'A brutal week sends them tumbling.', 'Questions everywhere after that one.']);
+  if (i < 3) return pick(['The class of the league right now.', 'Championship-caliber on both sides.', 'Everybody is chasing them.']);
+  if (pd > 40) return 'Point differential says they are for real.';
+  if (pd < -40) return 'Getting outscored badly — a rebuild may be coming.';
+  return pick(['Hanging around the playoff picture.', 'Middle of the pack, waiting for a spark.', 'Solid, but not scaring anybody yet.', 'Win the close ones and they rise fast.']);
+}
+function bracketHTML(L) {
+  const po = L.playoffs; if (!po) return '';
+  const rounds = ['Wild Card', 'Divisional', 'Conference', 'Final'];
+  const all = po.done.concat(po.games);
+  const g2 = g => `<div class="bk-g ${g.hs == null ? 'live' : ''}">${[['h', 'hs'], ['a', 'as']].map(([k, s]) => { const t = L.teams[g[k]], won = g.hs != null && (k === 'h' ? g.hs > g.as : g.as > g.hs); return `<div class="bk-t ${won ? 'w' : g.hs != null ? 'l' : ''} ${g[k] === L.userTid ? 'me' : ''}"><span class="emb xs">${emblemSVG(t)}</span>${esc(t.abbr)}<b class="num">${g[s] == null ? '' : g[s]}</b></div>`; }).join('')}</div>`;
+  return `<div class="card"><h2>Playoff bracket</h2><div class="bracket">${rounds.map((n, r) => `<div class="bk-col"><div class="eyebrow">${n}</div>${all.filter(g => g.round === r).map(g2).join('') || '<div class="muted small">TBD</div>'}</div>`).join('')}</div></div>`;
+}
+function viewRankings() {
+  const L = LEAGUE, pr = powerRanks(L), prev = L.prPrev || {};
+  return `${bracketHTML(L)}<div class="card"><h2>Power rankings <span class="muted small">${L.phase === 'regular' ? 'Week ' + L.week : phaseLabel(L.phase, L.week)}</span></h2><div class="tbl-wrap"><table class="t"><tbody>${pr.map((r, i) => {
+    const was = prev[r.t.id], mv = was ? was - (i + 1) : 0;
+    return `<tr class="${r.t.id === L.userTid ? 'me' : ''}"><td class="num"><b>${i + 1}</b></td><td class="small ${mv > 0 ? 'up' : mv < 0 ? 'down' : 'muted'}">${mv > 0 ? '▲' + mv : mv < 0 ? '▼' + -mv : '–'}</td><td><span class="emb xs">${emblemSVG(r.t)}</span> <b>${esc(teamName(r.t))}</b> <span class="muted small">${r.t.w}-${r.t.l}${r.t.t ? '-' + r.t.t : ''}</span><div class="small muted">${prBlurb(L, r, i, mv)}</div></td><td class="r">${ovrTag(teamOvr(L, r.t).ovr)}</td></tr>`; }).join('')}</tbody></table></div></div>`;
+}
+
+// ---------------- share custom plays ----------------
+function cpCode(d) { const c = Object.assign({}, d); delete c.id; return 'GDP1:' + btoa(unescape(encodeURIComponent(JSON.stringify(c)))); }
+function cpDecode(s) {
+  s = (s || '').trim(); if (!s.startsWith('GDP1:')) throw new Error('Not a play code');
+  const d = JSON.parse(decodeURIComponent(escape(atob(s.slice(5)))));
+  if (!d || !d.form || !d.type || !d.assign) throw new Error('Broken play code');
+  d.id = 'cp_' + Date.now().toString(36) + randi(0, 999); d.name = String(d.name || 'Shared play').slice(0, 28);
+  return d;
+}
+const _viewPlaybookSh = viewPlaybook;
+viewPlaybook = function () {
+  let h = _viewPlaybookSh();
+  if (CP_EDIT) return h;
+  h = h.replace(/data-act="cp-del" data-id="([^"]+)">Delete<\/button>/g, (m, id) => `data-act="cp-share" data-id="${id}">Share</button><button class="btn sm ghost" ${m}`);
+  return h + `<div class="card"><h2>Import a friend's play</h2><div class="row" style="gap:8px"><input id="cpImport" class="grow" placeholder="Paste a play code (starts with GDP1:)"><button class="btn sm primary" data-act="cp-import">Add to my playbook</button></div></div>`;
+};
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  if (el.dataset.act === 'cp-share') {
+    const d = cpLoad().find(x => x.id === el.dataset.id); if (!d) return;
+    const code = cpCode(d);
+    modal(`<div class="modal-head"><h2>Share "${esc(d.name)}"</h2><button class="btn sm ghost x" data-act="close">✕</button></div><p class="small">Send this code to a friend. They paste it under <b>Import a friend's play</b>.</p><textarea id="cpCodeTxt" rows="4" style="width:100%" readonly>${code}</textarea><div class="row"><button class="btn primary" data-act="cp-copycode">Copy code</button></div>`);
+  }
+  if (el.dataset.act === 'cp-copycode') { const ta = document.getElementById('cpCodeTxt'); ta.select(); if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(() => toast('Copied!'), () => toast('Select the text and copy it.')); else { document.execCommand && document.execCommand('copy'); toast('Copied.'); } }
+  if (el.dataset.act === 'cp-import') {
+    try { const d = cpDecode(document.getElementById('cpImport').value); const list = cpLoad(); list.push(d); cpStore(list); cpInstall(); toast(`"${d.name}" added to your playbook.`); renderHub(); }
+    catch (err) { toast('That code didn\'t work — check you copied all of it.'); }
+  }
+});
+
+// ============================================================
+// Gridiron Dynasty - UI glue for the newer features: extra hub tabs,
+// pre-snap buttons and keys, weather chip/effects, setup screen fields.
+// ============================================================
+'use strict';
+
+Object.assign(EXTRA_VIEWS, { star: viewStar, rankings: viewRankings, locker: viewLocker, staff: viewStaff, owner: viewOwner });
+
+const _updateHUD2 = updateHUD;
+updateHUD = function () {
+  _updateHUD2();
+  if (!GAME) return;
+  const lg = GAME.live, pre = lg.phase === 'pre' && $('#playcall').hidden && $('#hotMenu').hidden;
+  const db = document.getElementById('defBtns'); if (db) db.hidden = !(pre && lg.userOnDefense() && !lg.starMode());
+  const mb = document.getElementById('motionBtn'); if (mb) mb.hidden = !lg.canMotion();
+  const pb = document.getElementById('preBtns'); if (pb && lg.starMode() === 'off') pb.hidden = true;
+  const sb = document.getElementById('scorebug');
+  if (sb && GAME.gs.weather && !sb.querySelector('.wx-chip')) sb.insertAdjacentHTML('beforeend', `<div class="wx-chip">${wxLabel(GAME.gs)}</div>`);
+};
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el || !GAME) return;
+  const lg = GAME.live;
+  if (el.dataset.act === 'motion') { if (lg.startMotion()) updateHUD(); }
+  if (el.dataset.act === 'dadj') lg.defAdjust(el.dataset.k);
+});
+document.addEventListener('keydown', e => {
+  if (!GAME || GAME.paused) return; const lg = GAME.live;
+  if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  if (lg.phase !== 'pre') return;
+  if (e.code === 'KeyM' && lg.userOnOffense()) { if (lg.startMotion()) updateHUD(); }
+  if (lg.userOnDefense() && !lg.starMode()) {
+    if (e.code === 'KeyB') lg.defAdjust('blitz');
+    if (e.code === 'KeyC') lg.defAdjust('press');
+    if (e.code === 'Comma') lg.defAdjust('left');
+    if (e.code === 'Period') lg.defAdjust('right');
+  }
+});
+
+// weather effects start with each game
+const _startLive2 = startLiveGame;
+startLiveGame = function (hid, aid, userTid, opts) {
+  _startLive2(hid, aid, userTid, opts);
+  if (GAME && GAME.gs.weather) { const w = GAME.gs.weather; if (w.k !== 'clear' && w.k !== 'dome') setTimeout(() => toast(`Weather: ${wxLabel(GAME.gs)}. ${w.k === 'wind' ? 'Kicks and deep balls will drift.' : 'Slick ball — protect it and expect drops.'}`, 3500), 2200); requestAnimationFrame(wxLoop); }
+};
+
+// superstar fields on the setup screen
+document.addEventListener('change', e => {
+  if (e.target.id === 'setSS') { const f = document.getElementById('ssFields'); if (f) f.hidden = !e.target.checked; }
+});
 
 </script>

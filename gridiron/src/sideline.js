@@ -83,7 +83,7 @@ LiveGame.prototype.aiCarrier = function (e, dt) {
   let best = null, bs = -1e9;
   for (let a = -80; a <= 80; a += 10) {
     const ang = a * Math.PI / 180, ux = Math.cos(ang) * dir, uy = Math.sin(ang);
-    let s = Math.cos(ang) * 3;
+    let s = Math.cos(ang) * (this._fwdW || 3);
     const px = e.x + ux * 4, py = e.y + uy * 4;
     const edgeDist = Math.min(py, FIELD_W - py);
     if (edgeDist < 2.2) s -= wantOut ? 0 : 5 + (2.2 - edgeDist) * 4; // the sideline is a defender

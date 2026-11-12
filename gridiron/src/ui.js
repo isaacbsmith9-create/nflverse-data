@@ -76,7 +76,8 @@ function setupGo() {
 }
 
 // ============================================================ HUB
-const TABS = [['home', 'Home'], ['lineup', 'Lineup'], ['roster', 'Roster'], ['depth', 'Depth Chart'], ['dev', 'Development'], ['cap', 'Contracts'], ['schedule', 'Schedule'], ['standings', 'Standings'], ['stats', 'Leaders'], ['trade', 'Trade'], ['fa', 'Free Agents'], ['scout', 'Scouting'], ['draft', 'Draft'], ['history', 'History'], ['records', 'Records'], ['playbook', 'Playbook'], ['settings', 'Settings']];
+const TABS = [['home', 'Home'], ['lineup', 'Lineup'], ['roster', 'Roster'], ['depth', 'Depth Chart'], ['dev', 'Development'], ['cap', 'Contracts'], ['schedule', 'Schedule'], ['standings', 'Standings'], ['stats', 'Leaders'], ['trade', 'Trade'], ['fa', 'Free Agents'], ['scout', 'Scouting'], ['draft', 'Draft'], ['history', 'History'], ['records', 'Records'], ['playbook', 'Playbook'], ['star', 'My Player'], ['rankings', 'Rankings'], ['locker', 'Locker Room'], ['staff', 'Staff'], ['owner', 'Owner'], ['settings', 'Settings']];
+const EXTRA_VIEWS = {};
 function renderHub() {
   show('hub');
   const L = LEAGUE, t = UT(), o = teamOvr(L, t);
@@ -88,7 +89,7 @@ function renderHub() {
   const dotTab = { home: ['recap', 'resign', 'fa', 'draft'].includes(L.phase), draft: L.phase === 'draft', fa: L.phase === 'fa' };
   $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${TAB === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${n}${dotTab[k] ? '<span class="dot"></span>' : ''}</button>`).join('');
   const P = $('#panel');
-  const fn = { home: viewHome, lineup: viewLineup, dev: viewDev, cap: viewCap, scout: viewScout, roster: viewRoster, depth: viewDepth, schedule: viewSchedule, standings: viewStandings, stats: viewStats, trade: viewTrade, fa: viewFA, draft: viewDraft, history: viewHistory, records: viewRecords, playbook: viewPlaybook, settings: viewSettings }[TAB];
+  const fn = { home: viewHome, lineup: viewLineup, dev: viewDev, cap: viewCap, scout: viewScout, roster: viewRoster, depth: viewDepth, schedule: viewSchedule, standings: viewStandings, stats: viewStats, trade: viewTrade, fa: viewFA, draft: viewDraft, history: viewHistory, records: viewRecords, playbook: viewPlaybook, settings: viewSettings }[TAB] || EXTRA_VIEWS[TAB] || viewHome;
   P.innerHTML = fn();
   if (TAB === 'trade') tradeRefresh();
 }
@@ -709,6 +710,8 @@ function clockBar(lg, mode) {
   return `<div class="pc-clock row"><span class="small">Timeouts <b class="tos big">${[0, 1, 2].map(i => `<i class="${i < left ? 'on' : ''}"></i>`).join('')}</b></span>
     <button class="btn sm ${saves && left ? 'primary' : ''}" data-act="pc-timeout" ${left && saves ? '' : 'disabled'} title="Stops the clock and gets back the time that ran since the last play">Timeout${saves ? ` (save ${Math.round(gs.lastRunoff)}s)` : ''}</button>
     ${mode === 'off' ? `<button class="btn sm ${gs.noHuddle[u] ? 'primary' : ''}" data-act="pc-nohuddle">No-huddle: ${gs.noHuddle[u] ? 'ON' : 'OFF'}</button>` : ''}
+    ${gs.quarter >= 4 && gs.onside ? `<button class="btn sm ${gs.onside[u] ? 'primary' : ''}" data-act="onside-toggle" title="Your next kickoff will be an onside kick">Onside kick: ${gs.onside[u] ? 'ON' : 'OFF'}</button>` : ''}
+    ${gs.weather ? `<span class="pill">${wxLabel(gs)}</span>` : ''}
     ${twoMinuteTime(gs) ? '<span class="pill red">Two-minute drill</span>' : ''}</div>`;
 }
 function showPlayCall(mode, audible) {
@@ -727,7 +730,7 @@ function showPlayCall(mode, audible) {
     }
     if (gs.score[gs.poss] > gs.score[1 - gs.poss] && gs.quarter >= 4 && gs.clock < 150) specials.push(`<button class="play special" data-act="call-play" data-id="kneel"><span class="tag">Clock</span><span class="pn">QB Kneel</span><span class="pd">Run out the clock.</span></button>`);
     if (twoMinuteTime(gs) && (gs.lastRunoff || 0) > 0 && gs.down < 4) specials.unshift(`<button class="play special" data-act="call-play" data-id="spike"><span class="tag">Clock</span><span class="pn">Spike</span><span class="pd">Stop the clock now. Costs a down.</span></button>`);
-    const cats = ['My Plays', 'Run', 'Wildcat', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
+    const cats = ['My Plays', 'Run', 'Goal Line', 'Wildcat', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'];
     cards = specials.join('') + cats.map(c => { const ps = OFF_PLAYS.filter(p => (p.cat || 'Pass') === c); if (!ps.length) return ''; return `<div class="pc-sec" data-cat="${c}" ${PC_TAB !== 'All' && PC_TAB !== c ? 'hidden' : ''}><h3 class="pc-cat">${c === 'Trick' ? 'Trick plays' : c === 'RPO' ? 'RPOs' : c} <span class="muted small">${ps.length}</span></h3>` + ps.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'off')}<span class="tag">${c}</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('') + '</div>'; }).join('');
   } else {
     cards = DEF_PLAYS.map(p => `<button class="play" data-act="call-play" data-id="${p.id}">${playSVG(p, 'def')}<span class="tag">Defense</span><span class="pn">${p.name}</span><span class="pd">${p.desc}</span></button>`).join('');
@@ -735,7 +738,7 @@ function showPlayCall(mode, audible) {
   el.innerHTML = `<div class="pc-inner wrap"><div class="pc-head"><h2>${audible ? 'Audible' : mode === 'off' ? 'Call your play' : 'Call your defense'}</h2><span class="pill amber">${sit}</span><span class="grow"></span>
     <button class="btn sm" data-act="call-auto">Ask coach</button><button class="btn sm" data-act="sim-drive">Sim this drive</button>${mode === 'def' ? '<button class="btn sm primary" data-act="offense-only-now">Offense only from now on</button>' : ''}<button class="btn sm ghost" data-act="sim-game-rest">Sim rest of game</button></div>
     ${clockBar(lg, mode)}
-    ${mode === 'off' ? `<div class="pc-tabs">${['All', ...(OFF_PLAYS.some(p => p.custom) ? ['My Plays'] : []), 'Run', 'Wildcat', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'].map(t => `<button class="tab ${PC_TAB === t ? 'on' : ''}" data-act="pc-tab" data-cat="${t}">${t === 'Trick' ? 'Trick plays' : t}</button>`).join('')}</div>` : ''}
+    ${mode === 'off' ? `<div class="pc-tabs">${['All', ...(OFF_PLAYS.some(p => p.custom) ? ['My Plays'] : []), 'Run', 'Goal Line', 'Wildcat', 'Option', 'QB Run', 'RPO', 'Pass', 'Trick'].map(t => `<button class="tab ${PC_TAB === t ? 'on' : ''}" data-act="pc-tab" data-cat="${t}">${t === 'Trick' ? 'Trick plays' : t}</button>`).join('')}</div>` : ''}
     <div class="plays">${cards}</div></div>`;
   el.hidden = false;
 }

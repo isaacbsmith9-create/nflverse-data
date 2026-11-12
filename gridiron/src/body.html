@@ -26,6 +26,8 @@
         <label>Quarter length <select id="setQlen"><option value="120">2 min</option><option value="180">3 min</option><option value="240" selected>4 min</option><option value="300">5 min</option><option value="480">8 min</option></select></label>
         <label id="awayWrap" hidden>Opponent <select id="setAway"></select></label>
         <label class="row" style="gap:6px"><input type="checkbox" id="setSimDef"> <b>Offense only</b>&nbsp;(CPU drives are simmed)</label>
+        <label class="row" style="gap:6px"><input type="checkbox" id="setSS"> <b>Superstar mode</b>&nbsp;(play as one player)</label>
+        <span id="ssFields" class="row" style="gap:6px" hidden><input id="ssFirst" placeholder="First name" maxlength="16" style="width:110px"><input id="ssLast" placeholder="Last name" maxlength="18" style="width:120px"><select id="ssPos"><option>QB</option><option>RB</option><option selected>WR</option><option>TE</option><option>DL</option><option>LB</option><option>CB</option><option>S</option></select></span>
         <span class="grow"></span>
         <button class="btn primary" data-act="setup-go" id="setupGo" disabled>Start</button>
       </div>
@@ -44,6 +46,9 @@
 <section id="game" class="screen" hidden>
   <canvas id="gl" style="display:none"></canvas>
   <canvas id="cv"></canvas>
+  <canvas id="wxfx" class="wxfx"></canvas>
+  <div class="ticker" id="ticker" hidden></div>
+  <button class="btn sm primary replay-btn" id="replayBtn" data-act="replay" hidden>▶ Replay</button>
   <div class="scorebug" id="scorebug"></div>
   <button class="g-btn" id="pauseBtn" aria-label="Pause">❚❚</button>
   <div class="rotate-tip">Turn your phone sideways for the best view</div>
@@ -60,10 +65,12 @@
       <button class="tb" id="tbSprint">Sprint</button>
     </div>
   </div>
-  <div class="prebtns" id="preBtns" hidden><button class="btn sm" data-act="audible">Audible <kbd>P</kbd></button><button class="btn sm" data-act="hot-open">Hot route <kbd>H</kbd></button></div>
+  <div class="prebtns" id="preBtns" hidden><button class="btn sm" data-act="audible">Audible <kbd>P</kbd></button><button class="btn sm" data-act="hot-open">Hot route <kbd>H</kbd></button><button class="btn sm" id="motionBtn" data-act="motion">Motion <kbd>M</kbd></button></div>
+  <div class="prebtns" id="defBtns" hidden><button class="btn sm" data-act="dadj" data-k="blitz">Show blitz <kbd>B</kbd></button><button class="btn sm" data-act="dadj" data-k="press">Press / off <kbd>C</kbd></button><button class="btn sm" data-act="dadj" data-k="left">◀ Shift <kbd>,</kbd></button><button class="btn sm" data-act="dadj" data-k="right">Shift ▶ <kbd>.</kbd></button></div>
   <div class="playcall" id="hotMenu" hidden></div>
   <div class="playcall" id="playcall" hidden></div>
   <div class="final" id="final" hidden></div>
+  <div class="final" id="halftime" hidden></div>
   <div class="modal" id="pause" hidden>
     <div class="modal-box">
       <h2>Paused</h2>
