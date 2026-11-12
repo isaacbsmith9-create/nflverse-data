@@ -7636,6 +7636,31 @@ if (typeof window !== 'undefined') {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); });
 }
 
+// ---------- export / import as plain text (works inside sandboxed pages where downloads are blocked) ----------
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+function exportCode(L) {
+  const p = lzwPack(JSON.stringify(L)), parts = [];
+  for (let i = 0; i < p.length; i += 4096) {
+    let s = ''; for (let j = i; j < Math.min(p.length, i + 4096); j++) { const v = p.charCodeAt(j); s += B64[(v >> 12) & 63] + B64[(v >> 6) & 63] + B64[v & 63]; }
+    parts.push(s);
+  }
+  return 'CGD1:' + parts.join('');
+}
+function importCode(txt) {
+  txt = String(txt || '').trim();
+  if (!txt.startsWith('CGD1:')) return JSON.parse(txt);
+  const s = txt.slice(5).replace(/\s+/g, ''), idx = {}; for (let i = 0; i < 64; i++) idx[B64[i]] = i;
+  const codes = [];
+  for (let i = 0; i + 2 < s.length; i += 3) codes.push(String.fromCharCode((idx[s[i]] << 12) | (idx[s[i + 1]] << 6) | idx[s[i + 2]]));
+  return JSON.parse(lzwUnpack(codes.join('')));
+}
+doImport = function (txt, slot) {
+  try {
+    const L = importCode(txt); if (!L.teams || !L.players) throw new Error('bad');
+    LEAGUE = L; SLOT = slot; EXHIB = false; save(); flushSave(); closeModal(); TAB = 'home'; renderHub(); toast('Save imported.');
+  } catch (e) { toast('That text is not a valid College Gridiron Dynasty save.'); }
+};
+
 // ============================================================
 // College Gridiron Dynasty - look and sound: generic varsity-letter
 // emblems (no school marks), home-team end zones (school name at one
@@ -8293,11 +8318,12 @@ viewSettings = function () {
     + `<div class="card small muted">${$('#fanNote').textContent}</div>`;
 };
 exportSave = function () {
-  const json = JSON.stringify(LEAGUE);
-  let url = ''; try { url = URL.createObjectURL(new Blob([json], { type: 'application/json' })); } catch (e) { }
+  const code = exportCode(LEAGUE);
+  let dl = '', embedded = true; try { embedded = window.self !== window.top; } catch (e) { }
+  if (!embedded) try { const url = URL.createObjectURL(new Blob([code], { type: 'text/plain' })); dl = `<a class="btn" href="${url}" download="cfb-dynasty-${UT().abbr}-${LEAGUE.season}.txt">Download file</a>`; } catch (e) { }
   modal(`<div class="modal-head"><h2>Export save</h2><button class="btn sm ghost x" data-act="close">✕</button></div>
-    <p class="small muted">Download the file and keep it safe (it's about ${Math.round(json.length / 1048576 * 10) / 10} MB). To restore, choose Import save and pick the file.</p>
-    <div class="row">${url ? `<a class="btn primary" href="${url}" download="cfb-dynasty-${UT().abbr}-${LEAGUE.season}.json">Download file</a>` : ''}<button class="btn" data-act="copy-export">Copy as text</button></div><textarea id="exportTxt" rows="3" readonly style="width:100%">${json.length < 3e6 ? esc(json) : ''}</textarea>`);
+    <p class="small muted">This code is your whole dynasty (${Math.round(code.length / 1024)} KB of text). Copy it into a note or doc. To restore it on any device, choose Import save and paste it.</p>
+    <textarea id="exportTxt" rows="4" readonly style="width:100%">${code}</textarea><div class="row"><button class="btn primary" data-act="copy-export">Copy to clipboard</button>${dl}</div>`);
 };
 
 // ---------- scorebug ranks + college HUD ----------

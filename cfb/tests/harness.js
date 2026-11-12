@@ -35,7 +35,7 @@ function load(opts = {}) {
   vm.createContext(ctx);
   const read = (dir, f) => fs.readFileSync(path.join(__dirname, '..', dir, f), 'utf8');
   const src = [read('src', 'cfb_data.js'), ...shared.map(f => read('../gridiron/src', f)), ...college.map(f => read('src', f))].join('\n')
-    + '\n;globalThis.__api = { newCfbLeague, simWeek, beginOffseason, startPortal, portalAdvance, startNewSeason, simGame, saveLeague, loadLeague, teamOvr, pname, clsLabel, nilValue, payroll, capRoom, userPortalOffer, recruitWeek, fitScore, rcCtx, takeJob, lzwPack, lzwUnpack, get L() { return LEAGUE; }, set L(v) { LEAGUE = v; } };';
+    + '\n;globalThis.__api = { newCfbLeague, simWeek, beginOffseason, startPortal, portalAdvance, startNewSeason, simGame, saveLeague, loadLeague, teamOvr, pname, clsLabel, nilValue, payroll, capRoom, userPortalOffer, recruitWeek, fitScore, rcCtx, takeJob, lzwPack, lzwUnpack, exportCode, importCode, get L() { return LEAGUE; }, set L(v) { LEAGUE = v; } };';
   vm.runInContext(src, ctx, { filename: 'cfb-game.js' });
   ctx.__store = store;
   return ctx;

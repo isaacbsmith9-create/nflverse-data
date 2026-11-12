@@ -13,3 +13,9 @@ const big = JSON.stringify(Array.from({ length: 60000 }, (_, i) => ({ id: i, fir
 let t = Date.now(); const p = lzwPack(big); const t1 = Date.now() - t; t = Date.now(); const u = lzwUnpack(p);
 console.log('big', big.length, '->', p.length, u === big ? 'OK' : 'FAIL', t1 + 'ms pack', (Date.now() - t) + 'ms unpack');
 if (u !== big) process.exit(1);
+// export code round trip on a real league
+const { load } = require('./harness');
+const g2 = load(); const A2 = g2.__api; const L2 = A2.newCfbLeague('UGA');
+const code = A2.exportCode(L2); const back = A2.importCode(code);
+console.log('export code', (code.length / 1e6).toFixed(2) + 'M chars', /^CGD1:[A-Za-z0-9_-]+$/.test(code) ? 'url-safe' : 'BAD CHARS', back.teams.length === L2.teams.length && Object.keys(back.players).length === Object.keys(L2.players).length ? 'OK' : 'FAIL');
+if (!/^CGD1:[A-Za-z0-9_-]+$/.test(code) || Object.keys(back.players).length !== Object.keys(L2.players).length) process.exit(1);

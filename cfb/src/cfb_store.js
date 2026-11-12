@@ -88,3 +88,28 @@ if (typeof window !== 'undefined') {
   window.addEventListener('pagehide', flushSave);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); });
 }
+
+// ---------- export / import as plain text (works inside sandboxed pages where downloads are blocked) ----------
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+function exportCode(L) {
+  const p = lzwPack(JSON.stringify(L)), parts = [];
+  for (let i = 0; i < p.length; i += 4096) {
+    let s = ''; for (let j = i; j < Math.min(p.length, i + 4096); j++) { const v = p.charCodeAt(j); s += B64[(v >> 12) & 63] + B64[(v >> 6) & 63] + B64[v & 63]; }
+    parts.push(s);
+  }
+  return 'CGD1:' + parts.join('');
+}
+function importCode(txt) {
+  txt = String(txt || '').trim();
+  if (!txt.startsWith('CGD1:')) return JSON.parse(txt);
+  const s = txt.slice(5).replace(/\s+/g, ''), idx = {}; for (let i = 0; i < 64; i++) idx[B64[i]] = i;
+  const codes = [];
+  for (let i = 0; i + 2 < s.length; i += 3) codes.push(String.fromCharCode((idx[s[i]] << 12) | (idx[s[i + 1]] << 6) | idx[s[i + 2]]));
+  return JSON.parse(lzwUnpack(codes.join('')));
+}
+doImport = function (txt, slot) {
+  try {
+    const L = importCode(txt); if (!L.teams || !L.players) throw new Error('bad');
+    LEAGUE = L; SLOT = slot; EXHIB = false; save(); flushSave(); closeModal(); TAB = 'home'; renderHub(); toast('Save imported.');
+  } catch (e) { toast('That text is not a valid College Gridiron Dynasty save.'); }
+};

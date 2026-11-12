@@ -220,11 +220,12 @@ viewSettings = function () {
     + `<div class="card small muted">${$('#fanNote').textContent}</div>`;
 };
 exportSave = function () {
-  const json = JSON.stringify(LEAGUE);
-  let url = ''; try { url = URL.createObjectURL(new Blob([json], { type: 'application/json' })); } catch (e) { }
+  const code = exportCode(LEAGUE);
+  let dl = '', embedded = true; try { embedded = window.self !== window.top; } catch (e) { }
+  if (!embedded) try { const url = URL.createObjectURL(new Blob([code], { type: 'text/plain' })); dl = `<a class="btn" href="${url}" download="cfb-dynasty-${UT().abbr}-${LEAGUE.season}.txt">Download file</a>`; } catch (e) { }
   modal(`<div class="modal-head"><h2>Export save</h2><button class="btn sm ghost x" data-act="close">✕</button></div>
-    <p class="small muted">Download the file and keep it safe (it's about ${Math.round(json.length / 1048576 * 10) / 10} MB). To restore, choose Import save and pick the file.</p>
-    <div class="row">${url ? `<a class="btn primary" href="${url}" download="cfb-dynasty-${UT().abbr}-${LEAGUE.season}.json">Download file</a>` : ''}<button class="btn" data-act="copy-export">Copy as text</button></div><textarea id="exportTxt" rows="3" readonly style="width:100%">${json.length < 3e6 ? esc(json) : ''}</textarea>`);
+    <p class="small muted">This code is your whole dynasty (${Math.round(code.length / 1024)} KB of text). Copy it into a note or doc. To restore it on any device, choose Import save and paste it.</p>
+    <textarea id="exportTxt" rows="4" readonly style="width:100%">${code}</textarea><div class="row"><button class="btn primary" data-act="copy-export">Copy to clipboard</button>${dl}</div>`);
 };
 
 // ---------- scorebug ranks + college HUD ----------
