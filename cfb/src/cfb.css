@@ -1,0 +1,47 @@
+/* ---------- College Gridiron Dynasty additions ---------- */
+:root { --tc2: #ffffff; }
+.cfb-logo { line-height: .95; }
+.fan-note { max-width: 760px; }
+.rk { font: 800 .82em var(--f-display); color: var(--amber); letter-spacing: .02em; }
+.nick { color: var(--muted); font-weight: 600; }
+.pstars { color: var(--amber); letter-spacing: 1px; }
+.pstars .dim, .dim { color: #3b524a; }
+.stars, .stars.s5, .stars.s4 { color: var(--amber); letter-spacing: 1px; white-space: nowrap; }
+.stars.s3 { color: #e0c070; } .stars.s2 { color: #9aa8a1; }
+.team-card { border-left: 4px solid var(--tc1, var(--line)); }
+.hub-head { border-bottom: 3px solid var(--tc1); background: linear-gradient(90deg, color-mix(in srgb, var(--tc1) 28%, var(--bg2)) 0%, var(--bg2) 55%); }
+.secbar { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 6px; max-width: 360px; }
+.secbar i { flex: 1; height: 6px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.secbar i b { display: block; height: 100%; border-radius: 4px; }
+.pill.rival { background: #6b1d1d; border-color: #b33a3a; color: #ffd7d2; font-weight: 700; letter-spacing: .06em; }
+.pill.green { background: #12402a; border-color: #1f7a4c; color: #b6f5cf; }
+.game-card { position: relative; overflow: hidden; }
+.game-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 5px; background: linear-gradient(90deg, var(--ac1) 0 50%, var(--hc1) 50% 100%); }
+.game-card.rivalry { box-shadow: 0 0 0 1px #8a2b2b inset; }
+.card.inner { background: var(--bg); padding: 12px; }
+.pollrow { display: flex; gap: 10px; align-items: center; padding: 3px 4px; border-radius: 6px; }
+.pollrow.me, tr.me td { background: color-mix(in srgb, var(--tc1) 22%, transparent); }
+td.up { color: var(--green); } td.down { color: var(--red); }
+b.win { color: var(--green); } b.loss { color: var(--red); }
+.bracket { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 12px; margin: 12px 0; overflow-x: auto; }
+.bk-g { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 6px 0; font-size: 13px; display: grid; gap: 4px; }
+.bk-g > div { display: flex; align-items: center; gap: 6px; }
+.bk-g > div b { margin-left: auto; }
+.bk-g .w { font-weight: 700; color: var(--amber); }
+.rc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+.rc-card { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
+.rc-card.won { border-color: #1f7a4c; } .rc-card.lost { opacity: .6; }
+.pri { display: inline-flex; gap: 6px; align-items: center; background: var(--bg3); border-radius: 6px; padding: 2px 8px; }
+.pri .g { font-size: 11px; padding: 1px 5px; }
+.suit { display: inline-block; padding: 1px 6px; border-radius: 5px; background: var(--bg3); margin-right: 2px; font-size: 12px; }
+.suit.me { background: var(--amber); color: var(--amber-ink); font-weight: 700; }
+.pos-chip.cls { background: var(--bg); }
+.mine { color: var(--amber); }
+.sb-team .ab small { font-size: .62em; color: var(--amber); margin-right: 3px; vertical-align: top; }
+@media (max-width: 640px) {
+  .bracket { grid-template-columns: repeat(4, 150px); }
+  .rc-grid { grid-template-columns: 1fr; }
+  .secbar { max-width: none; }
+}
+.dep-stack .tbl-wrap { max-width: 100%; }
+.dep-stack td:last-child { white-space: normal; }

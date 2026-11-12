@@ -1,0 +1,88 @@
+<section id="menu" class="screen">
+  <div class="menu-inner wrap">
+    <div class="logo cfb-logo">College Gridiron<span>Dynasty</span><small>Real schools · real rosters · NIL · portal · recruiting</small></div>
+    <div class="menu-actions">
+      <button class="btn primary" data-act="new-franchise">New Dynasty</button>
+      <button class="btn" data-act="quick-play">Quick Play</button>
+      <button class="btn" data-act="import">Import Save</button>
+      <button class="btn ghost" data-act="howto">How to Play</button>
+    </div>
+    <div>
+      <div class="eyebrow" style="margin-bottom:10px">Dynasty saves</div>
+      <div class="menu-grid" id="slots"></div>
+    </div>
+    <p class="muted small fan-note" id="fanNote">Unofficial fan-made game. Not affiliated with or endorsed by the NCAA, any conference, school or player. School names and colors identify the real programs; emblems are generic and made for this game. Rosters and schedules come from public data. Player ratings, NIL values, budgets and draft projections are this game's own estimates, not real figures. All recruits are fictional.</p>
+    <p class="muted small">Saves are stored in this browser. Use Export in Settings to back up a dynasty or move it to another device.</p>
+  </div>
+</section>
+
+<section id="setup" class="screen" hidden>
+  <div class="menu-inner wrap" style="max-width:1180px">
+    <div class="row"><button class="btn ghost" data-act="menu">← Back</button><h1 id="setupTitle" style="font-size:36px">Choose your team</h1></div>
+    <div class="card stack">
+      <div class="row">
+        <label id="leagueWrap" hidden><select id="setLeague"><option value="real" selected>real</option></select></label>
+        <label>Conference <select id="setConf"><option value="ALL">All FBS</option></select></label>
+        <label>Search <input type="text" id="setSearch" placeholder="School" style="width:130px"></label>
+        <label>Your name <input type="text" id="setCoach" placeholder="Coach" maxlength="24" style="width:130px"></label>
+        <label>Difficulty <select id="setDiff"><option value="rookie">Rookie</option><option value="pro" selected>Pro</option><option value="allpro">All-Pro</option><option value="legend">Legend</option></select></label>
+        <label>Quarter length <select id="setQlen"><option value="120">2 min</option><option value="180">3 min</option><option value="240" selected>4 min</option><option value="300">5 min</option><option value="480">8 min</option></select></label>
+        <label id="awayWrap" hidden>Opponent <select id="setAway"></select></label>
+        <label class="row" style="gap:6px"><input type="checkbox" id="setSimDef"> <b>Offense only</b>&nbsp;(CPU drives are simmed)</label>
+        <span class="grow"></span>
+        <button class="btn primary" data-act="setup-go" id="setupGo" disabled>Start</button>
+      </div>
+      <div class="muted small" id="setupInfo">Tap a team to pick it.</div>
+    </div>
+    <div id="teamGrid"></div>
+  </div>
+</section>
+
+<section id="hub" class="screen" hidden>
+  <header class="hub-head" id="hubHead"></header>
+  <nav class="tabs wrap" id="tabs"></nav>
+  <main class="panel wrap"><div class="panel-inner" id="panel"></div></main>
+</section>
+
+<section id="game" class="screen" hidden>
+  <canvas id="gl" style="display:none"></canvas>
+  <canvas id="cv"></canvas>
+  <div class="scorebug" id="scorebug"></div>
+  <button class="g-btn" id="pauseBtn" aria-label="Pause">❚❚</button>
+  <div class="rotate-tip">Turn your phone sideways for the best view</div>
+  <div class="banner" id="banner" hidden></div>
+  <div class="hint" id="hint" hidden></div>
+  <div class="kbd-help" id="kbdHelp"></div>
+  <div class="rbtns" id="rbtns" hidden></div>
+  <div class="touch" id="touch" hidden>
+    <div id="joy"></div>
+    <div class="tbtns">
+      <button class="tb" id="tbSwitch">Switch</button>
+      <button class="tb act" id="tbAct">Snap</button>
+      <span></span>
+      <button class="tb" id="tbSprint">Sprint</button>
+    </div>
+  </div>
+  <div class="prebtns" id="preBtns" hidden><button class="btn sm" data-act="audible">Audible <kbd>P</kbd></button><button class="btn sm" data-act="hot-open">Hot route <kbd>H</kbd></button></div>
+  <div class="playcall" id="hotMenu" hidden></div>
+  <div class="playcall" id="playcall" hidden></div>
+  <div class="final" id="final" hidden></div>
+  <div class="modal" id="pause" hidden>
+    <div class="modal-box">
+      <h2>Paused</h2>
+      <div class="row">
+        <button class="btn primary" data-act="resume">Resume</button>
+        <button class="btn" data-act="sim-game-rest">Sim rest of game</button>
+        <button class="btn" data-act="toggle-simdef" id="simDefBtn">Offense only: Off</button>
+        <button class="btn" data-act="toggle-cam">Switch camera</button>
+        <button class="btn" data-act="toggle-touch">Toggle touch controls</button>
+        <button class="btn" data-act="toggle-sound">Toggle sound</button>
+      </div>
+      <div class="small muted" id="pauseLog"></div>
+    </div>
+  </div>
+</section>
+
+<div class="modal" id="modal" hidden><div class="modal-box" id="modalBox"></div></div>
+<div class="toast" id="toast" hidden></div>
+<input type="file" id="fileIn" accept=".json,application/json" hidden>
