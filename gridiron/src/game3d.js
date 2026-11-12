@@ -440,7 +440,7 @@ function drawFigure(ctx, X, Y, k, e, team, home, sp, selected, hasBall, pose) {
   ctx.save();
   ctx.translate(X, Y - bob);
   // body rotation for falls, wrap-ups, dives and stumbles (pivot at the feet)
-  const pt = pose && pose.type, pk = pose ? pose.k : 0, ease = 1 - Math.pow(1 - pk, 3), pdir = pose && pose.dir ? pose.dir : 1;
+  const pt = pose && (['flex', 'spike', 'dance', 'point', 'leap'].includes(pose.type) ? 'celebrate' : pose.type), pk = pose ? pose.k : 0, ease = 1 - Math.pow(1 - pk, 3), pdir = pose && pose.dir ? pose.dir : 1;
   if (pt === 'down') { ctx.rotate(pdir * ease * 1.45); ctx.translate(0, ease * 0.2 * k); }
   else if (pt === 'wrap') { ctx.rotate(pdir * ease * 1.25); ctx.translate(0, ease * 0.25 * k); }
   else if (pt === 'dive') ctx.rotate(pdir * 1.05);

@@ -401,3 +401,20 @@ td.up { color: #7ee2a8; } td.down { color: #ff7b72; }
 .bk-t { display: flex; gap: 6px; align-items: center; padding: 5px 8px; font-size: 13px; } .bk-t b { margin-left: auto; }
 .bk-t.w { font-weight: 800; } .bk-t.l { opacity: .55; } .bk-t.me { box-shadow: inset 3px 0 0 var(--amber); }
 table.box td, table.box th { padding: 4px 8px; }
+
+/* ---- stat card, challenges, trophies ---- */
+.statcard { position: absolute; left: 12px; bottom: 96px; z-index: 6; background: rgba(8,12,18,.82); border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 8px 10px; font-size: 13px; color: #fff; max-width: min(440px, 70vw); pointer-events: none; }
+.sc-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 2px 0; }
+.sc-row .pos-chip { font-size: 10px; padding: 0 5px; }
+.sc-row .ab { font-size: 11px; font-weight: 700; color: #ffd23f; opacity: .7; } .sc-row .ab.on { opacity: 1; text-shadow: 0 0 8px #ff7a1a; color: #ffb347; }
+.sc-row .tired { font-size: 10px; color: #ff9b8f; border: 1px solid #6b2a26; border-radius: 6px; padding: 0 5px; }
+.sc-row.warn { color: #ffb347; }
+.pr-log { margin: -4px 0 10px; }
+.ch-list { display: grid; gap: 8px; margin-top: 10px; max-height: 60vh; overflow: auto; }
+.ch { text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--bg3); border: 1px solid var(--line); color: inherit; cursor: pointer; }
+.ch:hover { border-color: var(--amber); }
+.stars { color: #ffd23f; letter-spacing: 2px; } .stars i { color: rgba(255,255,255,.18); font-style: normal; }
+.tro-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; max-height: 62vh; overflow: auto; }
+.tro { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 10px; background: var(--bg3); opacity: .55; }
+.tro.got { opacity: 1; border: 1px solid var(--amber); } .tro .ic { font-size: 22px; }
+@media (max-width: 760px) { .statcard { display: none; } }

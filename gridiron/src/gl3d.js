@@ -255,6 +255,11 @@ function poseModel(m, e, pose, sp, t2) {
       m.tilt.rotation.x = (pose.type === 'dive' ? 1.05 : ease * 1.3); m.body.position.y = 0; break;
     case 'down': m.tilt.rotation.x = -ease * 1.5; AL.sh.rotation.set(-0.4, 0, -0.9); AR.sh.rotation.set(-0.4, 0, 0.9); L.knee.rotation.x = 0.6; break;
     case 'celebrate': AL.sh.rotation.set(-3.0, 0, -0.35); AR.sh.rotation.set(-3.0, 0, 0.35); AL.el.rotation.x = AR.el.rotation.x = -0.2; m.body.position.y = Math.abs(Math.sin(t2 * 9)) * 0.35; break;
+    case 'flex': AL.sh.rotation.set(-1.6, 0, -1.4); AR.sh.rotation.set(-1.6, 0, 1.4); AL.el.rotation.x = AR.el.rotation.x = -2.3; m.torso.rotation.x = -0.15; break;
+    case 'spike': { const f = Math.min(1, k * 4); AR.sh.rotation.set(-3.0 + f * 2.6, 0, 0.2); AR.el.rotation.x = -0.2; AL.sh.rotation.set(-0.6, 0, -0.4); m.torso.rotation.x = 0.2 * f; break; }
+    case 'dance': { const w = Math.sin(t2 * 10); m.torso.rotation.z = w * 0.25; AL.sh.rotation.set(-1.2 + w * 0.6, 0, -0.9); AR.sh.rotation.set(-1.2 - w * 0.6, 0, 0.9); L.knee.rotation.x = 0.4 + w * 0.3; R.knee.rotation.x = 0.4 - w * 0.3; m.body.position.y = Math.abs(w) * 0.12; break; }
+    case 'point': AR.sh.rotation.set(-3.1, 0, 0.1); AR.el.rotation.x = 0; AL.sh.rotation.set(-0.3, 0, -0.3); m.torso.rotation.x = -0.2; break;
+    case 'leap': m.body.position.y = Math.max(0, Math.sin(Math.min(1, k * 2.2) * Math.PI)) * 1.1; AL.sh.rotation.set(-2.6, 0, -0.5); AR.sh.rotation.set(-2.6, 0, 0.5); L.knee.rotation.x = R.knee.rotation.x = 0.9; break;
     case 'incomp': AL.sh.rotation.set(-0.2, 0, -1.3); AR.sh.rotation.set(-0.2, 0, 1.3); AL.el.rotation.x = AR.el.rotation.x = -0.2; break;
     case 'swat': AR.sh.rotation.set(-2.95, 0, 0.2); AR.el.rotation.x = -0.1; break;
   }
@@ -330,7 +335,7 @@ LiveGame.prototype.renderGL = function (ctx, W, H) {
       if (hm) {
         hm.root.updateMatrixWorld(true);
         const pose = this.poseFor ? this.poseFor(b.holder) : null;
-        const useHand = pose && ['qbready', 'throw', 'celebrate'].includes(pose.type);
+        const useHand = pose && ['qbready', 'throw', 'celebrate', 'point', 'leap'].includes(pose.type);
         const pos = new THREE.Vector3();
         if (useHand) hm.arms[1].hd.getWorldPosition(pos); else hm.torso.localToWorld(pos.set(0.3, 0.3, 0.12));
         S.ball.position.copy(pos); S.ball.rotation.set(0.3, hm.yaw, 0);

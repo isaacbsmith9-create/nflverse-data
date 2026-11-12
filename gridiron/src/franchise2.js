@@ -185,7 +185,7 @@ LiveGame.prototype.endPlay = function (kind, msg) {
   const was = this.phase, c = this.carrier(), tk = this.tackler;
   const r = _endPlayInj.call(this, kind, msg);
   if (was === 'live' && kind === 'tackle' && c) {
-    for (const [e, p0] of [[c, 0.0055], [tk, 0.0025]]) if (e && e.p && !e.p.scrub && !e.p.star && chance(p0)) this.injure(e);
+    for (const [e, p0] of [[c, 0.0055], [tk, 0.0025]]) if (e && e.p && !e.p.scrub && !e.p.star && chance(p0 * sl().inj)) this.injure(e);
   }
   return r;
 };

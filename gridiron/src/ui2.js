@@ -14,6 +14,8 @@ updateHUD = function () {
   const db = document.getElementById('defBtns'); if (db) db.hidden = !(pre && lg.userOnDefense() && !lg.starMode());
   const mb = document.getElementById('motionBtn'); if (mb) mb.hidden = !lg.canMotion();
   const pb = document.getElementById('preBtns'); if (pb && lg.starMode() === 'off') pb.hidden = true;
+  const sc = document.getElementById('statCard');
+  if (sc) { const show = lg.phase === 'pre' && $('#playcall').hidden && $('#hotMenu').hidden && lg.ents.length; sc.hidden = !show; if (show && sc._k !== lg.gs.log.length + ':' + lg.gs.poss) { sc._k = lg.gs.log.length + ':' + lg.gs.poss; sc.innerHTML = statCardHTML(lg); } }
   const sb = document.getElementById('scorebug');
   if (sb && GAME.gs.weather && !sb.querySelector('.wx-chip')) sb.insertAdjacentHTML('beforeend', `<div class="wx-chip">${wxLabel(GAME.gs)}</div>`);
 };
