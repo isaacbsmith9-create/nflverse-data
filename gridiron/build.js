@@ -34,3 +34,32 @@ ${innerReal}
 </body></html>
 `);
 console.log('built index.html and dist/gridiron-artifact.html', Math.round(inner.length / 1024) + 'KB');
+// ---------- website (GitHub Pages serves the repo's docs/ folder) ----------
+{
+  const site = path.join(__dirname, '..', 'docs');
+  const page = (t, scripts, manifest) => `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b1512"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<title>${t}</title>
+<link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg" type="image/svg+xml">
+${fonts}
+<style>
+${css}
+</style></head><body>
+${scripts}
+<script>if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
+</body></html>
+`;
+  const man = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.webmanifest'), 'utf8'));
+  for (const [dir, t, scripts, name] of [['nfl', 'Gridiron Dynasty — Pro League', innerReal, 'Gridiron Pro'], ['league', 'Gridiron Dynasty — Fictional League', inner, 'Gridiron League']]) {
+    const d = path.join(site, dir); fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(d, 'index.html'), page(t, scripts));
+    fs.writeFileSync(path.join(d, 'manifest.webmanifest'), JSON.stringify(Object.assign({}, man, { name, short_name: name }), null, 2));
+    fs.copyFileSync(path.join(__dirname, 'icon.svg'), path.join(d, 'icon.svg'));
+    fs.writeFileSync(path.join(d, 'sw.js'), fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8').replace("'gridiron-v1'", `'gridiron-${dir}-v1'`));
+  }
+  if (!fs.existsSync(path.join(site, 'index.html')) || !fs.readFileSync(path.join(site, 'index.html'), 'utf8').includes('data-keep')) fs.copyFileSync(path.join(__dirname, 'site', 'landing.html'), path.join(site, 'index.html'));
+  fs.writeFileSync(path.join(site, '.nojekyll'), '');
+  console.log('built website in docs/');
+}
