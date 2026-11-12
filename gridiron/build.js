@@ -3,7 +3,7 @@
 //  - dist/gridiron-artifact.html : body-only version for publishing as a claude.ai artifact
 const fs = require('fs'), path = require('path');
 const src = f => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
-const files = ['data.js', 'franchise.js', 'moves.js', 'real.js', 'sim.js', 'game.js', 'plays.js', 'extras.js', 'plays2.js', 'clock.js', 'penalties.js', 'wildcat.js', 'game3d.js', 'gl3d.js', 'logos.js', 'ui.js', 'lineup.js', 'mgmt.js', 'records.js', 'designer.js', 'sideline.js', 'runfix.js', 'presnap.js', 'weather.js', 'returns.js', 'franchise2.js', 'superstar.js', 'present.js', 'zone.js', 'modes.js', 'ui2.js'];
+const files = ['data.js', 'franchise.js', 'moves.js', 'real.js', 'sim.js', 'game.js', 'plays.js', 'extras.js', 'plays2.js', 'clock.js', 'penalties.js', 'wildcat.js', 'game3d.js', 'gl3d.js', 'logos.js', 'ui.js', 'lineup.js', 'mgmt.js', 'records.js', 'designer.js', 'sideline.js', 'runfix.js', 'presnap.js', 'weather.js', 'returns.js', 'franchise2.js', 'superstar.js', 'present.js', 'zone.js', 'modes.js', 'skillmoves.js', 'ui2.js'];
 const js = files.map(src).join('\n');
 // the real-NFL data ships only in the standalone index.html, never in the artifact build
 const realJs = fs.existsSync(path.join(__dirname, 'src', 'nfl_data.js')) ? src('nfl_data.js') + '\n' : '';

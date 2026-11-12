@@ -826,7 +826,7 @@ window.addEventListener('blur', () => { KEYS.down.clear(); keyAxis(); });
 
 function applyTouch() {
   $('#touch').hidden = !touchMode; $('#kbdHelp').hidden = touchMode;
-  $('#kbdHelp').innerHTML = '<b>Move</b> <kbd>WASD</kbd>/<kbd>↑↓←→</kbd> · <b>Sprint</b> <kbd>Shift</kbd><br><b>Snap/Juke/Dive</b> <kbd>Space</kbd> · <b>Throw</b> <kbd>1</kbd>–<kbd>5</kbd> · <kbd>T</kbd> away<br><b>Switch</b> <kbd>E</kbd> · <b>Pause</b> <kbd>Esc</kbd>';
+  $('#kbdHelp').innerHTML = '<b>Move</b> <kbd>WASD</kbd>/<kbd>↑↓←→</kbd> · <b>Sprint</b> <kbd>Shift</kbd><br><b>Snap/Juke/Dive</b> <kbd>Space</kbd> · <b>Throw</b> <kbd>1</kbd>–<kbd>5</kbd> · <kbd>T</kbd> away<br><b>Switch</b> <kbd>E</kbd> · <b>Pause</b> <kbd>Esc</kbd><br><b>Moves</b> <kbd>F</kbd> stiff arm / hit stick · <kbd>R</kbd> spin / strip · <kbd>V</kbd> hurdle · <kbd>X</kbd> truck · <kbd>C</kbd> hesi';
 }
 (function initTouch() {
   const joy = $('#joy'); let base = null, knob = null;

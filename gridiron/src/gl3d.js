@@ -255,6 +255,14 @@ function poseModel(m, e, pose, sp, t2) {
       m.tilt.rotation.x = (pose.type === 'dive' ? 1.05 : ease * 1.3); m.body.position.y = 0; break;
     case 'down': m.tilt.rotation.x = -ease * 1.5; AL.sh.rotation.set(-0.4, 0, -0.9); AR.sh.rotation.set(-0.4, 0, 0.9); L.knee.rotation.x = 0.6; break;
     case 'celebrate': AL.sh.rotation.set(-3.0, 0, -0.35); AR.sh.rotation.set(-3.0, 0, 0.35); AL.el.rotation.x = AR.el.rotation.x = -0.2; m.body.position.y = Math.abs(Math.sin(t2 * 9)) * 0.35; break;
+    case 'mv_stiff': AR.sh.rotation.set(-1.55, 0, 0.9 * (pose.dir || 1)); AR.el.rotation.x = -0.05; AL.sh.rotation.set(-0.6, 0, -0.2); AL.el.rotation.x = -2.1; m.torso.rotation.x = 0.2; break;
+    case 'mv_spin': m.tilt.rotation.y = ease * Math.PI * 2 * (pose.dir || 1); AL.sh.rotation.set(-0.5, 0, -0.6); AR.sh.rotation.set(-0.5, 0, 0.6); break;
+    case 'mv_hurdle': m.body.position.y = Math.sin(k * Math.PI) * 1.25; L.hip.rotation.x = -1.1; R.hip.rotation.x = -0.5; L.knee.rotation.x = 1.6; R.knee.rotation.x = 0.9; AL.sh.rotation.set(-1.8, 0, -0.3); AR.sh.rotation.set(-1.2, 0, 0.3); break;
+    case 'mv_truck': m.torso.rotation.x = 0.65; AL.sh.rotation.set(-0.9, 0, -0.1); AR.sh.rotation.set(-0.7, 0, 0.2); AL.el.rotation.x = AR.el.rotation.x = -2.2; L.knee.rotation.x = R.knee.rotation.x = 0.7; break;
+    case 'mv_hesi': m.torso.rotation.x = -0.25; L.knee.rotation.x = R.knee.rotation.x = 0.75; L.hip.rotation.x = R.hip.rotation.x = -0.4; AL.sh.rotation.set(-0.4, 0, -0.5); AR.sh.rotation.set(-0.4, 0, 0.5); break;
+    case 'mv_hit': m.tilt.rotation.x = 0.55; AL.sh.rotation.set(-1.7, 0, 0.4); AR.sh.rotation.set(-1.7, 0, -0.4); AL.el.rotation.x = AR.el.rotation.x = -0.6; L.knee.rotation.x = 0.8; break;
+    case 'mv_strip': AR.sh.rotation.set(-2.4 + ease * 1.8, 0, 0.3); AR.el.rotation.x = -0.2; AL.sh.rotation.set(-1.4, 0, -0.2); m.torso.rotation.x = 0.3; break;
+    case 'mv_high': m.body.position.y = Math.sin(Math.min(1, k * 1.4) * Math.PI) * 0.9; AL.sh.rotation.set(-3.1, 0, -0.12); AR.sh.rotation.set(-3.1, 0, 0.12); AL.el.rotation.x = AR.el.rotation.x = 0; break;
     case 'flex': AL.sh.rotation.set(-1.6, 0, -1.4); AR.sh.rotation.set(-1.6, 0, 1.4); AL.el.rotation.x = AR.el.rotation.x = -2.3; m.torso.rotation.x = -0.15; break;
     case 'spike': { const f = Math.min(1, k * 4); AR.sh.rotation.set(-3.0 + f * 2.6, 0, 0.2); AR.el.rotation.x = -0.2; AL.sh.rotation.set(-0.6, 0, -0.4); m.torso.rotation.x = 0.2 * f; break; }
     case 'dance': { const w = Math.sin(t2 * 10); m.torso.rotation.z = w * 0.25; AL.sh.rotation.set(-1.2 + w * 0.6, 0, -0.9); AR.sh.rotation.set(-1.2 - w * 0.6, 0, 0.9); L.knee.rotation.x = 0.4 + w * 0.3; R.knee.rotation.x = 0.4 - w * 0.3; m.body.position.y = Math.abs(w) * 0.12; break; }

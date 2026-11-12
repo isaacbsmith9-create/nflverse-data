@@ -440,7 +440,7 @@ function drawFigure(ctx, X, Y, k, e, team, home, sp, selected, hasBall, pose) {
   ctx.save();
   ctx.translate(X, Y - bob);
   // body rotation for falls, wrap-ups, dives and stumbles (pivot at the feet)
-  const pt = pose && (['flex', 'spike', 'dance', 'point', 'leap'].includes(pose.type) ? 'celebrate' : pose.type), pk = pose ? pose.k : 0, ease = 1 - Math.pow(1 - pk, 3), pdir = pose && pose.dir ? pose.dir : 1;
+  const pt = pose && ({ flex: 'celebrate', spike: 'celebrate', dance: 'celebrate', point: 'celebrate', leap: 'celebrate', mv_hurdle: 'celebrate', mv_high: 'reach', mv_hit: 'dive', mv_stiff: 'block', mv_truck: 'block', mv_strip: 'swat', mv_spin: null, mv_hesi: null }[pose.type] !== undefined ? { flex: 'celebrate', spike: 'celebrate', dance: 'celebrate', point: 'celebrate', leap: 'celebrate', mv_hurdle: 'celebrate', mv_high: 'reach', mv_hit: 'dive', mv_stiff: 'block', mv_truck: 'block', mv_strip: 'swat', mv_spin: null, mv_hesi: null }[pose.type] : pose.type), pk = pose ? pose.k : 0, ease = 1 - Math.pow(1 - pk, 3), pdir = pose && pose.dir ? pose.dir : 1;
   if (pt === 'down') { ctx.rotate(pdir * ease * 1.45); ctx.translate(0, ease * 0.2 * k); }
   else if (pt === 'wrap') { ctx.rotate(pdir * ease * 1.25); ctx.translate(0, ease * 0.25 * k); }
   else if (pt === 'dive') ctx.rotate(pdir * 1.05);

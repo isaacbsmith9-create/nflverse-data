@@ -63,7 +63,7 @@ LiveGame.prototype.endPlay = function (kind, msg) {
   if (this.phase === 'live' && kind === 'tackle' && c && c.side === 'O' && !pl.int && !this.ret && c.x < 109.5) {
     const w = WX[(gs.weather || {}).k] || WX.clear;
     const p = 0.0075 * w.fum * clamp((110 - c.r.btk) / 50, 0.5, 1.6) * (this.tackler && this.tackler.dive > 0 ? 1.4 : 1);
-    if (chance(p * sl().fum)) {
+    if (chance((p + (this.fumbleBoost || 0)) * sl().fum)) {
       sfx('whistle');
       st(gs, c.p, 'fum');
       if (chance(0.52)) {

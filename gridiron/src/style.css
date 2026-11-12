@@ -418,3 +418,9 @@ table.box td, table.box th { padding: 4px 8px; }
 .tro { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 10px; background: var(--bg3); opacity: .55; }
 .tro.got { opacity: 1; border: 1px solid var(--amber); } .tro .ic { font-size: 22px; }
 @media (max-width: 760px) { .statcard { display: none; } }
+
+/* ---- skill move buttons ---- */
+.movebtns { position: absolute; right: 12px; bottom: 150px; z-index: 7; display: flex; flex-direction: column; gap: 6px; }
+.movebtns .mvb { background: rgba(8,12,18,.78); color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 10px; padding: 7px 12px; font-weight: 700; font-size: 13px; text-align: left; cursor: pointer; touch-action: manipulation; }
+.movebtns .mvb:active { background: var(--amber); color: #111; }
+@media (pointer: coarse) { .movebtns { bottom: 180px; } .movebtns .mvb { padding: 11px 14px; font-size: 14px; } }
