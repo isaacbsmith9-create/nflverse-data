@@ -431,3 +431,18 @@ table.box td, table.box th { padding: 4px 8px; }
 .grade { display: inline-block; min-width: 30px; text-align: center; border-radius: 6px; padding: 0 6px; margin-right: 6px; background: var(--bg3); }
 .grade.gA { background: #1e5a39; color: #c9f5da; } .grade.gB { background: #23415a; color: #cfe6ff; } .grade.gC { background: #5a4a1e; color: #ffe9b0; } .grade.gD, .grade.gF { background: #5a1e1e; color: #ffd2ce; }
 .tu-list { display: grid; gap: 6px; max-height: 40vh; overflow: auto; margin: 10px 0; }
+
+/* ---- pregame matchup banner ---- */
+.intro { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); z-index: 9; display: flex; align-items: stretch; gap: 0; pointer-events: none; animation: inSlide .55s cubic-bezier(.2,.9,.3,1.2); filter: drop-shadow(0 12px 30px rgba(0,0,0,.55)); }
+.intro.out { animation: inOut .5s ease-in forwards; }
+.in-team { --c: #333; background: linear-gradient(160deg, color-mix(in srgb, var(--c) 85%, #fff 15%), var(--c) 60%, color-mix(in srgb, var(--c) 70%, #000)); padding: 14px 22px; display: flex; flex-direction: column; align-items: center; min-width: 170px; color: #fff; }
+.in-team:first-child { border-radius: 14px 0 0 14px; } .in-team:last-child { border-radius: 0 14px 14px 0; }
+.in-team .emb, .in-team svg { width: 64px; height: 64px; }
+.in-team b { font: 800 italic 34px/1 var(--f-display); text-transform: uppercase; margin-top: 6px; text-shadow: 0 2px 0 rgba(0,0,0,.35); }
+.in-team span { font-size: 13px; opacity: .85; margin-top: 2px; }
+.in-mid { background: #0b0f14; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 18px; min-width: 120px; }
+.in-mid b { font: 800 italic 30px/1 var(--f-display); color: var(--amber); margin: 6px 0; }
+.in-mid span { font-size: 12px; opacity: .8; text-transform: uppercase; letter-spacing: .08em; text-align: center; }
+@keyframes inSlide { from { opacity: 0; transform: translateX(-50%) scale(.85); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+@keyframes inOut { to { opacity: 0; transform: translateX(-50%) translateY(-30px) scale(.95); } }
+@media (max-width: 700px) { .in-team { min-width: 110px; padding: 10px 12px; } .in-team b { font-size: 22px; } .in-team svg { width: 40px; height: 40px; } }
