@@ -35,7 +35,7 @@ LiveGame.prototype.special = function (id) {
 const _nextClock = LiveGame.prototype.next;
 LiveGame.prototype.next = function () {
   const gs = this.gs;
-  if (!gs.over && this.user >= 0 && (gs.lastRunoff || 0) > 10) {
+  if (!gs.over && this.user >= 0 && !this.two && (gs.lastRunoff || 0) > 10) {
     const cpu = 1 - this.user, behind = gs.score[cpu] < gs.score[this.user] || (gs.quarter === 2 && gs.poss === cpu);
     const late = (gs.quarter >= 4 && gs.clock < 150) || (gs.quarter === 2 && gs.clock < 60);
     if (late && behind && gs.timeouts[cpu] > 0 && (gs.score[this.user] - gs.score[cpu] <= 16 || gs.quarter === 2)) {

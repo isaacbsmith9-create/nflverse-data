@@ -433,6 +433,13 @@ table.box td, table.box th { padding: 4px 8px; }
 .movebtns .mvb:active { background: var(--amber); color: #111; }
 @media (pointer: coarse) { .movebtns { bottom: 180px; } .movebtns .mvb { padding: 11px 14px; font-size: 14px; } }
 
+/* ---- 2 players, draft day ---- */
+.tp-keys { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px; margin: 12px 0; }
+.tp-keys > div { background: var(--bg3); border-radius: 10px; padding: 10px; line-height: 1.9; }
+.grade { display: inline-block; min-width: 30px; text-align: center; border-radius: 6px; padding: 0 6px; margin-right: 6px; background: var(--bg3); }
+.grade.gA { background: #1e5a39; color: #c9f5da; } .grade.gB { background: #23415a; color: #cfe6ff; } .grade.gC { background: #5a4a1e; color: #ffe9b0; } .grade.gD, .grade.gF { background: #5a1e1e; color: #ffd2ce; }
+.tu-list { display: grid; gap: 6px; max-height: 40vh; overflow: auto; margin: 10px 0; }
+
 </style></head><body>
 <section id="menu" class="screen">
   <div class="menu-inner wrap">
@@ -440,6 +447,8 @@ table.box td, table.box th { padding: 4px 8px; }
     <div class="menu-actions">
       <button class="btn primary" data-act="new-franchise">New Franchise</button>
       <button class="btn" data-act="quick-play">Quick Play</button>
+      <button class="btn" data-act="two-player">2 Players</button>
+      <button class="btn" data-act="watch">Watch a Game</button>
       <button class="btn" data-act="practice">Practice</button>
       <button class="btn" data-act="challenges">Challenges</button>
       <button class="btn" data-act="trophies">🏆 Trophies</button>
@@ -466,6 +475,7 @@ table.box td, table.box th { padding: 4px 8px; }
         <label id="awayWrap" hidden>Opponent <select id="setAway"></select></label>
         <label class="row" style="gap:6px"><input type="checkbox" id="setSimDef"> <b>Offense only</b>&nbsp;(CPU drives are simmed)</label>
         <label class="row" style="gap:6px"><input type="checkbox" id="setSS"> <b>Superstar mode</b>&nbsp;(play as one player)</label>
+        <label class="row" style="gap:6px"><input type="checkbox" id="setFD"> <b>Fantasy draft</b>&nbsp;(draft every team from scratch)</label>
         <span id="ssFields" class="row" style="gap:6px" hidden><input id="ssFirst" placeholder="First name" maxlength="16" style="width:110px"><input id="ssLast" placeholder="Last name" maxlength="18" style="width:120px"><select id="ssPos"><option>QB</option><option>RB</option><option selected>WR</option><option>TE</option><option>DL</option><option>LB</option><option>CB</option><option>S</option></select></span>
         <span class="grow"></span>
         <button class="btn primary" data-act="setup-go" id="setupGo" disabled>Start</button>
@@ -3524,7 +3534,7 @@ LiveGame.prototype.special = function (id) {
 const _nextClock = LiveGame.prototype.next;
 LiveGame.prototype.next = function () {
   const gs = this.gs;
-  if (!gs.over && this.user >= 0 && (gs.lastRunoff || 0) > 10) {
+  if (!gs.over && this.user >= 0 && !this.two && (gs.lastRunoff || 0) > 10) {
     const cpu = 1 - this.user, behind = gs.score[cpu] < gs.score[this.user] || (gs.quarter === 2 && gs.poss === cpu);
     const late = (gs.quarter >= 4 && gs.clock < 150) || (gs.quarter === 2 && gs.clock < 60);
     if (late && behind && gs.timeouts[cpu] > 0 && (gs.score[this.user] - gs.score[cpu] <= 16 || gs.quarter === 2)) {
@@ -7954,6 +7964,505 @@ updateHUD = function () {
       : mode === 'def' ? [['hit', 'Hit stick', 'F'], ['strip', 'Strip', 'R']].map(([k, n, key]) => `<button class="mvb" data-mv="${k}">${n}${touchMode ? '' : ` <kbd>${key}</kbd>`}</button>`).join('') : '';
   }
 };
+
+// ============================================================
+// Gridiron Dynasty - 2-player head-to-head on one keyboard.
+// Whoever has the ball plays offense; the other player controls a
+// defender. Both call plays in secret.
+//   P1 (home): WASD · Space action · Left Shift sprint · Q switch · 1-5 throw · T away · F/R/V/X/C moves
+//   P2 (away): Arrows · Enter action · Right Shift sprint · / switch · 6-0 throw · . away · J/K/L/U/I moves
+// ============================================================
+'use strict';
+
+const KS = {
+  0: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', act: ['Space'], sprint: 'ShiftLeft', sw: ['KeyQ', 'KeyE'], away: ['KeyT'], thr: ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'], mv: { KeyF: ['stiff', 'hit'], KeyR: ['spin', 'strip'], KeyV: ['hurdle'], KeyX: ['truck'], KeyC: ['hesi'] } },
+  1: { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', act: ['Enter', 'NumpadEnter'], sprint: 'ShiftRight', sw: ['Slash'], away: ['Period'], thr: ['Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'], mv: { KeyJ: ['stiff', 'hit'], KeyK: ['spin', 'strip'], KeyL: ['hurdle'], KeyU: ['truck'], KeyI: ['hesi'] } },
+};
+const TP_DOWN = new Set();
+const LTP = LiveGame.prototype;
+
+function tpAxis(lg, side) {
+  const k = KS[side], d = TP_DOWN;
+  const x = (d.has(k.right) ? 1 : 0) - (d.has(k.left) ? 1 : 0), y = (d.has(k.down) ? 1 : 0) - (d.has(k.up) ? 1 : 0);
+  return lg.camMode === 'top' ? [x, y] : [-y, x];
+}
+// who is on defense this snap
+LTP.defSide = function () { return 1 - this.gs.poss; };
+
+const _nextTP = LTP.next;
+LTP.next = function () {
+  if (this.two && !this.gs.over) { this.user = this.gs.poss; this.diff = 0; this._defPick = null; this._offPick = null; }
+  return _nextTP.call(this);
+};
+// secret play calling: offense picks, then the defense picks
+const _chooseTP = LTP.choose;
+LTP.choose = function (id) {
+  if (!this.two || this.gs.over) return _chooseTP.call(this, id);
+  const special = SPECIAL_PLAYS.some(p => p.id === id) || id === 'fakepunt' || id === 'fakefg';
+  if (this._offPick == null && !special) {
+    this._offPick = id; this.phase = 'call';
+    const who = this.defSide() === 0 ? 'Player 1' : 'Player 2';
+    showPlayCall('def');
+    const h = document.querySelector('#playcall .pc-head h2'); if (h) h.textContent = `${who}: call your defense`;
+    const n = document.querySelector('#playcall .pc-head'); if (n) n.insertAdjacentHTML('afterend', `<p class="small pill amber" style="display:inline-block">${this.defSide() === 0 ? 'Player 2' : 'Player 1'} — no peeking!</p>`);
+    return;
+  }
+  if (this._offPick != null && !special) {
+    const off = this._offPick, def = DEF_PLAYS.find(d => d.id === id) || cpuDefCall(this.gs); this._offPick = null;
+    const keep = cpuDefCall; cpuDefCall = () => def;
+    try { _chooseTP.call(this, off); } finally { cpuDefCall = keep; }
+  } else _chooseTP.call(this, id);
+  // the defending player starts on a linebacker
+  if (this.D && this.D.LB) { this.ctrl2 = this.D.LB[0]; this.input2 = { mx: 0, my: 0, sprint: false, actionEdge: false, sw: false, move: null }; }
+};
+const _showPCtp = showPlayCall;
+showPlayCall = function (mode, audible) {
+  _showPCtp(mode, audible);
+  const lg = GAME && GAME.live; if (!lg || !lg.two || mode !== 'off') return;
+  const h = document.querySelector('#playcall .pc-head h2'); if (h) h.textContent = `${lg.gs.poss === 0 ? 'Player 1' : 'Player 2'}: call your play`;
+  for (const b of document.querySelectorAll('#playcall [data-act="sim-drive"], #playcall [data-act="call-auto"]')) b.hidden = true;
+};
+
+// per-frame: route each keyboard half to the right player
+const _updateTP = LTP.update;
+LTP.update = function (dt) {
+  if (this.two) {
+    const off = this.gs.poss, def = 1 - off, inp = this.input;
+    const [ox, oy] = tpAxis(this, off); inp.mx = ox; inp.my = oy; inp.sprint = TP_DOWN.has(KS[off].sprint);
+    if (this.input2) { const [dx, dy] = tpAxis(this, def); this.input2.mx = dx; this.input2.my = dy; this.input2.sprint = TP_DOWN.has(KS[def].sprint); }
+    if (this.phase === 'pre' && this.input2 && this.input2.sw) { this.input2.sw = false; this.cycleD2(); }
+  }
+  return _updateTP.call(this, dt);
+};
+LTP.cycleD2 = function () {
+  const order = ['LB1', 'LB2', 'S1', 'S2', 'CB1', 'CB2', 'CB3', 'DL1', 'DL2', 'DL3', 'DL4'];
+  if (this.phase === 'pre') { const i = order.indexOf(this.ctrl2 ? this.ctrl2.role : 'DL4'); this.ctrl2 = this.droles[order[(i + 1) % order.length]]; return; }
+  const ref = this.ball || { x: this.los, y: this.gs.ballY };
+  const c = this.ents.filter(e => e.side === 'D' && e !== this.ctrl2).sort((a, b) => this.dist(a, ref) - this.dist(b, ref))[0]; if (c) this.ctrl2 = c;
+};
+const _liveStepTP = LTP.liveStep;
+LTP.liveStep = function (dt) {
+  const c = this.ctrl2, i2 = this.input2;
+  if (this.two && c && i2) {
+    if (this.play.int) { this.ctrl2 = this.play.intBy; } // picked it off: player 2 runs it back
+    if (i2.sw) { i2.sw = false; this.cycleD2(); }
+    const car = this.carrier(), b = this.ball;
+    if (i2.move) { const m = i2.move; i2.move = null; if (car && car.side !== c.side && this.dist(c, car) < 3.2) this.doMove(c, m === 'stiff' ? 'hit' : m === 'spin' ? 'strip' : m); }
+    if (i2.actionEdge) {
+      i2.actionEdge = false;
+      if (c.eng && (c.moveCd || 0) <= this.t) { c.moveCd = this.t + 1.1; const bl = c.eng; if (chance(clamp(0.32 + (c.r.prs - bl.r.rbk) / 140, 0.1, 0.75))) { bl.eng = null; c.eng = null; c.freeT = 1.2; bl.stun = 0.45; this.flash('Rush move!'); } }
+      else if (b && b.state === 'air') c.swat = 0.45; else if (c.stun <= 0) c.dive = 0.35;
+    }
+  }
+  return _liveStepTP.call(this, dt);
+};
+// the defending player's stick steers his defender (otherwise he plays his assignment)
+const _aiTP = LTP.ai;
+LTP.ai = function (e, dt) {
+  const i2 = this.input2;
+  if (this.two && e === this.ctrl2 && i2 && Math.abs(i2.mx) + Math.abs(i2.my) > 0.15 && !e.eng && e.stun <= 0) {
+    const m = Math.hypot(i2.mx, i2.my);
+    this.steerDir(e, i2.mx / m, i2.my / m, (i2.sprint ? 1.0 : 0.86) * Math.min(1, m), dt);
+    if (e.dive > 0) { e.vx *= 1.04; e.vy *= 1.04; }
+    return;
+  }
+  return _aiTP.call(this, e, dt);
+};
+
+// keyboard: both halves handled here in 2-player games
+window.addEventListener('keydown', e => {
+  if (!GAME || !GAME.live.two || $('#game').hidden) return;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement && document.activeElement.tagName)) return;
+  if (e.code === 'Escape' || !$('#playcall').hidden || !$('#halftime').hidden) return; // menus work as usual
+  const lg = GAME.live, off = lg.gs.poss, def = 1 - off;
+  if (e.repeat) { e.stopImmediatePropagation(); e.preventDefault(); return; }
+  TP_DOWN.add(e.code);
+  const ko = KS[off], kd = KS[def], i = lg.input, i2 = lg.input2 || {};
+  if (ko.act.includes(e.code)) i.actionEdge = true;
+  if (ko.sw.includes(e.code)) i.sw = true;
+  if (ko.away.includes(e.code)) i.throwAway = true;
+  const ti = ko.thr.indexOf(e.code); if (ti >= 0 && lg.eligible) i.throwTo = lg.eligible[ti] || null;
+  if (ko.mv[e.code]) i.move = ko.mv[e.code][0];
+  if (kd.act.includes(e.code)) i2.actionEdge = true;
+  if (kd.sw.includes(e.code)) i2.sw = true;
+  if (kd.mv[e.code]) i2.move = kd.mv[e.code][kd.mv[e.code].length - 1];
+  if (off === 0 && e.code === 'KeyP' && lg.phase === 'pre') showPlayCall('off', true);
+  if (off === 0 && e.code === 'KeyH' && lg.phase === 'pre') openHotMenu();
+  if (off === 0 && e.code === 'KeyM' && lg.phase === 'pre') lg.startMotion();
+  e.stopImmediatePropagation(); e.preventDefault();
+}, true);
+window.addEventListener('keyup', e => { TP_DOWN.delete(e.code); }, true);
+window.addEventListener('blur', () => TP_DOWN.clear());
+
+// second selection ring for player 2's defender (3D view)
+const _renderGLtp = LTP.renderGL;
+if (_renderGLtp) LTP.renderGL = function (ctx, W, H) {
+  const r = _renderGLtp.call(this, ctx, W, H);
+  const S = this.gl;
+  if (this.two && S && S.ring) {
+    if (!this._ring2 || this._ring2.parent !== S.scene) { this._ring2 = S.ring.clone(); this._ring2.material = S.ring.material.clone(); this._ring2.material.color = new THREE.Color('#4dd7ff').convertSRGBToLinear(); S.scene.add(this._ring2); }
+    const c2 = this.ctrl2; this._ring2.visible = !!c2 && this.phase !== 'call'; if (c2) this._ring2.position.copy(W2T(c2.x, c2.y, 0.05));
+  }
+  return r;
+};
+
+// start a 2-player game
+function twoPlayerModal() {
+  const L = freshLeague();
+  PR_TMP = L;
+  modal(`<div class="modal-head"><h2>2 Players</h2><button class="btn sm ghost x" data-act="close">✕</button></div>
+    <p class="small">Head-to-head on one keyboard. Whoever has the ball plays offense; the other player controls a defender. Plays are called in secret.</p>
+    <div class="stack"><label>Player 1 (home) <select id="tpA">${teamOpts(L, 0)}</select></label><label>Player 2 (away) <select id="tpB">${teamOpts(L, 7)}</select></label>
+    <label>Quarter length <select id="tpQ"><option value="120">2 min</option><option value="180" selected>3 min</option><option value="300">5 min</option></select></label></div>
+    <div class="tp-keys"><div><b>Player 1</b><br>Move <kbd>WASD</kbd> · Action <kbd>Space</kbd> · Sprint <kbd>L-Shift</kbd><br>Switch <kbd>Q</kbd> · Throw <kbd>1</kbd>–<kbd>5</kbd> · Away <kbd>T</kbd><br>Moves <kbd>F</kbd> <kbd>R</kbd> <kbd>V</kbd> <kbd>X</kbd> <kbd>C</kbd></div>
+    <div><b>Player 2</b><br>Move <kbd>Arrows</kbd> · Action <kbd>Enter</kbd> · Sprint <kbd>R-Shift</kbd><br>Switch <kbd>/</kbd> · Throw <kbd>6</kbd>–<kbd>0</kbd> · Away <kbd>.</kbd><br>Moves <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> <kbd>U</kbd> <kbd>I</kbd></div></div>
+    <button class="btn primary" data-act="tp-go">Kick off</button>`);
+}
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  if (el.dataset.act === 'two-player') twoPlayerModal();
+  if (el.dataset.act === 'tp-go') {
+    const L = PR_TMP, a = +$('#tpA').value; let b = +$('#tpB').value; if (a === b) b = (a + 1) % L.teams.length;
+    L.userTid = a; L.settings.simDef = false; L.settings.qlen = +$('#tpQ').value; L.settings.diff = 'pro'; L.superstar = null;
+    LEAGUE = L; EXHIB = true; closeModal();
+    startLiveGame(a, b, a, { exhibition: true, two: true });
+    GAME.live.two = true; GAME.gs.liveUser = null; GAME.live.diff = 0;
+    toast('2 players: P1 = WASD + Space · P2 = Arrows + Enter');
+  }
+});
+
+// ============================================================
+// Gridiron Dynasty - extra point or go for two (played live), smarter
+// CPU two-point decisions, and Watch mode (CPU vs CPU, live).
+// ============================================================
+'use strict';
+
+// CPU: chart-style two-point decisions late in games (replaces the old rule)
+function cpuGoesForTwo(gs, side) {
+  const diff = gs.score[side] - gs.score[1 - side]; // after the TD, before the try
+  if (gs.quarter < 4 && !(gs.quarter === 3 && gs.clock < 300)) return false;
+  return [-2, -5, -9, -10, -12, -13, 1, 5, 12].includes(diff);
+}
+const _patG = pat;
+pat = function (gs, side) {
+  const human = gs.liveUser != null && gs.liveUser >= 0 ? side === gs.liveUser : !!gs.two;
+  if (gs.livePAT && !gs.over) { gs.patPending = { side, human, cpu2: !human && cpuGoesForTwo(gs, side) }; return; }
+  if (cpuGoesForTwo(gs, side)) {
+    if (chance(0.48)) { gs.score[side] += 2; logp(gs, 'Two-point conversion is GOOD.', true); } else logp(gs, 'Two-point conversion fails.');
+    return;
+  }
+  const k = gs.lu[side].K[0], p = clamp(0.88 + (k.r.kac - 70) / 300, 0.8, 0.99);
+  st(gs, k, 'xpa');
+  if (chance(p)) { gs.score[side] += 1; st(gs, k, 'xpm'); } else logp(gs, 'Extra point is NO GOOD!');
+};
+// hold the kickoff until the try is done
+const _kickoffG = kickoff;
+kickoff = function (gs, recv, silent) {
+  if (gs.patPending && !silent) { gs.koPending = recv; return; }
+  return _kickoffG(gs, recv, silent);
+};
+function finishTry(gs) {
+  const r = gs.koPending; gs.koPending = null; gs.twoTry = null;
+  if (r != null && !gs.over) kickoff(gs, r);
+}
+// a live two-point try: one snap from the 2, no clock
+const _applyPlayG = applyPlay;
+applyPlay = function (gs, res) {
+  const T = gs.twoTry; if (!T) return _applyPlayG(gs, res);
+  const good = !res.turnover && !res.inc && gs.yard + (res.yards || 0) >= 100;
+  if (good) { gs.score[T.side] += 2; logp(gs, 'TWO-POINT CONVERSION IS GOOD!', true); } else logp(gs, 'Two-point try fails.');
+  gs.lastTry = good;
+  checkOT(gs); finishTry(gs);
+};
+const LG2 = LiveGame.prototype;
+const _nextG2 = LG2.next;
+LG2.next = function () {
+  const gs = this.gs;
+  if (this.user < 0 && !this.two) gs.livePAT = false;
+  if (gs.patPending) {
+    const P = gs.patPending;
+    if (gs.over) { gs.patPending = null; _patG(gs, P.side); gs.koPending = null; return _nextG2.call(this); }
+    if (P.human) return this.showPAT(P.side);
+    gs.patPending = null;
+    if (P.cpu2 && this.user >= 0) return this.startTwo(P.side); // CPU goes for two: you defend it live
+    _patG(gs, P.side); finishTry(gs);
+  }
+  if (gs.twoTry && this.phase !== 'live') { /* try finished via applyPlay */ }
+  return _nextG2.call(this);
+};
+LG2.showPAT = function (side) {
+  this.ents = []; this.ball = null; this.phase = 'call';
+  const gs = this.gs, k = gs.lu[side].K[0], p = Math.round(clamp(0.88 + (k.r.kac - 70) / 300, 0.8, 0.99) * 100);
+  const diff = gs.score[side] - gs.score[1 - side];
+  const el = $('#playcall');
+  el.innerHTML = `<div class="pc-inner wrap"><div class="pc-head"><h2>${this.two ? (side === 0 ? 'Player 1: ' : 'Player 2: ') : ''}Touchdown! Now what?</h2><span class="pill amber">${diff > 0 ? 'Up ' + diff : diff < 0 ? 'Down ' + -diff : 'Tied'} · ${gs.quarter <= 4 ? 'Q' + gs.quarter : 'OT'} ${fmtClock(gs.clock)}</span></div>
+    <div class="plays"><button class="play special" data-act="pat-kick"><span class="tag">1 point</span><span class="pn">Extra point</span><span class="pd">${esc(pshort(k))} makes these about ${p}% of the time.</span></button>
+    <button class="play special" data-act="pat-two"><span class="tag">2 points</span><span class="pn">Go for two</span><span class="pd">One play from the 2-yard line. Call any play.</span></button></div></div>`;
+  el.hidden = false;
+};
+LG2.startTwo = function (side) {
+  const gs = this.gs; gs.patPending = null;
+  gs.twoTry = { side }; gs.poss = side; gs.yard = 98; gs.down = 1; gs.togo = 2; gs.ballY = MID_Y;
+  this.h.toast && this.h.toast(`${teamAbbr(gs, side)} going for two!`);
+  return _nextG2.call(this);
+};
+// no clock on tries
+const _runClockG = runClock;
+runClock = function (gs, sec) { if (gs.twoTry) return false; return _runClockG(gs, sec); };
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el || !GAME) return;
+  const lg = GAME.live, gs = lg.gs, P = gs.patPending; if (!P) return;
+  if (el.dataset.act === 'pat-kick') { $('#playcall').hidden = true; gs.patPending = null; _patG(gs, P.side); finishTry(gs); lg.h.update(); lg.result(gs.log[gs.log.length - 1] && /NO GOOD/.test(gs.log[gs.log.length - 1].txt) ? 'Extra point NO GOOD' : 'Extra point is good', ''); }
+  if (el.dataset.act === 'pat-two') { $('#playcall').hidden = true; lg.startTwo(P.side); }
+});
+// two-point banners
+const _resultG2 = LG2.result;
+LG2.result = function (title, sub, big) {
+  const gs = this.gs;
+  if (gs.lastTry != null) { const g = gs.lastTry; gs.lastTry = null; return _resultG2.call(this, g ? 'TWO-POINT CONVERSION!' : 'Two-point try fails', sub, g); }
+  return _resultG2.call(this, title, sub, big);
+};
+// live games handle the try themselves
+const _startLiveG2 = startLiveGame;
+startLiveGame = function (hid, aid, userTid, opts = {}) {
+  _startLiveG2(hid, aid, userTid, opts);
+  if (GAME) { GAME.gs.livePAT = true; if (opts.two) GAME.gs.two = true; if (opts.watch) { const lg = GAME.live; lg.user = -1; lg.ctrl = null; GAME.gs.liveUser = null; GAME.gs.livePAT = false; lg.watch = true; } }
+};
+
+// ---------------- Watch mode ----------------
+function watchModal() {
+  const L = freshLeague(); PR_TMP = L;
+  modal(`<div class="modal-head"><h2>Watch a game</h2><button class="btn sm ghost x" data-act="close">✕</button></div>
+    <p class="small">Sit back and watch two teams play it out live. Space skips to the next play, Esc pauses.</p>
+    <div class="stack"><label>Home <select id="wA">${teamOpts(L, 0)}</select></label><label>Away <select id="wB">${teamOpts(L, 9)}</select></label>
+    <button class="btn primary" data-act="watch-go">Start</button></div>`);
+}
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  if (el.dataset.act === 'watch') watchModal();
+  if (el.dataset.act === 'watch-go') {
+    const L = PR_TMP, a = +$('#wA').value; let b = +$('#wB').value; if (a === b) b = (a + 1) % L.teams.length;
+    L.userTid = a; L.superstar = null; LEAGUE = L; EXHIB = true; closeModal();
+    startLiveGame(a, b, a, { exhibition: true, watch: true });
+  }
+  if (el.dataset.act === 'watch-mine' && LEAGUE) { const g = userGame(LEAGUE); if (g) startLiveGame(g.h, g.a, LEAGUE.userTid, { playoff: LEAGUE.phase === 'playoffs', watch: true }); }
+});
+// franchise: "Watch it" next to Play on the home card
+const _homeGameCardG2 = homeGameCard;
+homeGameCard = function () {
+  const h = _homeGameCardG2();
+  return h.replace(/(<button[^>]*data-act="play-game"[^>]*>[^<]*<\/button>)/, '$1<button class="btn" data-act="watch-mine">Watch it</button>');
+};
+
+// simulated drives decide their own tries instantly
+for (const fn of ['simDrive', 'simOnePlay']) {
+  const orig = globalThis[fn] || (fn === 'simDrive' ? simDrive : simOnePlay);
+  const wrapped = function (gs, ...a) { const lp = gs.livePAT; gs.livePAT = false; try { return orig(gs, ...a); } finally { gs.livePAT = lp; } };
+  if (fn === 'simDrive') simDrive = wrapped; else simOnePlay = wrapped;
+}
+// a two-point try doesn't count toward season stats
+const _endPlayG2 = LG2.endPlay;
+LG2.endPlay = function (kind, msg) {
+  if (!this.gs.twoTry || this.phase !== 'live') return _endPlayG2.call(this, kind, msg);
+  const keep = JSON.stringify(this.gs.box); const r = _endPlayG2.call(this, kind, msg); this.gs.box = JSON.parse(keep); return r;
+};
+
+// ============================================================
+// Gridiron Dynasty - draft day: trade up / trade down during the draft,
+// pick grades and class grades, and a Fantasy Draft franchise start.
+// ============================================================
+'use strict';
+
+const pickVal = overall => Math.round(1000 * Math.exp(-0.042 * (overall - 1)) + 15);
+const futureVal = round => Math.round(pickVal((round - 1) * 32 + 16) * 0.85);
+function boardScore(p) { return p.ovr * 0.6 + (p.pot || p.ovr) * 0.4; }
+function letter(v) { return v >= 15 ? 'A+' : v >= 7 ? 'A' : v >= 2 ? 'B+' : v >= -4 ? 'B' : v >= -10 ? 'C' : v >= -20 ? 'D' : 'F'; }
+
+// ---------------- pick grades ----------------
+const _draftPickD2 = draftPick;
+draftPick = function (L, pid) {
+  const d = L.draft, slot = d && d.slots[d.cur];
+  const board = L.draftClass.slice().sort((a, b) => boardScore(b) - boardScore(a));
+  const rank = board.findIndex(p => p.id === pid) + 1, overall = d ? d.cur + 1 : 0;
+  _draftPickD2(L, pid);
+  if (!slot || !rank) return;
+  // grade = where he sat on the board of players still available when the pick was made
+  const v = rank <= 1 ? 6 : rank <= 3 ? 3 : rank <= 8 ? 0 : rank <= 15 ? -5 : -12;
+  const g = { pid, tid: slot.owner, overall, rank, grade: letter(v + (rank === 1 && overall > 10 ? 9 : 0)) };
+  (L.dgrades = L.dgrades || []).push(g);
+  if (slot.owner === L.userTid && typeof toast === 'function') {
+    const p = L.players[pid];
+    toast(`Pick #${overall}: ${p.pos} ${pname(p)} — grade ${g.grade}${rank === 1 ? ' (best player on the board!)' : rank > 15 ? ' (a reach)' : ''}`, 3500);
+  }
+};
+function classGrades(L) {
+  const by = {};
+  for (const g of L.dgrades || []) { const s = { 'A+': 4.3, A: 4, 'B+': 3.3, B: 3, C: 2, D: 1, F: 0 }[g.grade]; (by[g.tid] = by[g.tid] || []).push(s * (g.overall <= 64 ? 1.5 : 1)); }
+  return Object.entries(by).map(([tid, a]) => ({ tid: +tid, gpa: a.reduce((x, y) => x + y, 0) / a.length })).sort((a, b) => b.gpa - a.gpa)
+    .map(x => Object.assign(x, { grade: x.gpa >= 3.9 ? 'A' : x.gpa >= 3.5 ? 'A-' : x.gpa >= 3.2 ? 'B+' : x.gpa >= 2.9 ? 'B' : x.gpa >= 2.5 ? 'C+' : x.gpa >= 2.1 ? 'C' : 'D' }));
+}
+const _startDraftD2 = startDraft;
+startDraft = function (L) { L.dgrades = []; return _startDraftD2(L); };
+
+// ---------------- trading picks ----------------
+function myDraftAssets(L) {
+  const d = L.draft, out = [];
+  d.slots.forEach((s, i) => { if (i >= d.cur && s.owner === L.userTid && s.pid == null) out.push({ kind: 'slot', i, label: `Round ${s.round}, pick #${i + 1}`, v: pickVal(i + 1) }); });
+  for (const pk of L.picks || []) if (pk.owner === L.userTid && pk.season === L.season + 2) out.push({ kind: 'future', pk, label: `${pk.season} round ${pk.round}`, v: futureVal(pk.round) });
+  return out;
+}
+function tradeUpModal() {
+  const L = LEAGUE, d = L.draft, cur = d.slots[d.cur]; if (!cur || cur.owner === L.userTid) return;
+  const t = L.teams[cur.owner], want = pickVal(d.cur + 1);
+  const mine = myDraftAssets(L);
+  modal(`<div class="modal-head"><h2>Trade up to #${d.cur + 1}</h2><button class="btn sm ghost x" data-act="close">✕</button></div>
+    <p class="small">${esc(teamName(t))} are on the clock. Offer picks worth more than theirs (pick value <b>${want}</b>) and they'll deal.</p>
+    <div class="tu-list">${mine.map((a, i) => `<label class="row" style="gap:8px"><input type="checkbox" class="tu-cb" data-i="${i}"> ${a.label} <span class="muted small">value ${a.v}</span></label>`).join('') || '<p class="muted">You have no picks left to trade.</p>'}</div>
+    <p class="small">Your offer: <b id="tuVal">0</b> / ${Math.round(want * 1.05)}</p>
+    <button class="btn primary" data-act="tu-offer">Make the offer</button>`);
+  TU = { mine, want: Math.round(want * 1.05), tid: cur.owner };
+}
+let TU = null;
+function tradeDownOffers(L) {
+  const d = L.draft, here = pickVal(d.cur + 1), offers = [];
+  const seen = new Set();
+  for (let i = d.cur + 1; i < Math.min(d.slots.length, d.cur + 26); i++) {
+    const s = d.slots[i]; if (s.owner === L.userTid || seen.has(s.owner)) continue; seen.add(s.owner);
+    const theirs = [{ i, v: pickVal(i + 1) }];
+    for (let j = i + 1; j < d.slots.length && theirs.reduce((a, b) => a + b.v, 0) < here * 1.04; j++) if (d.slots[j].owner === s.owner) theirs.push({ i: j, v: pickVal(j + 1) });
+    const total = theirs.reduce((a, b) => a + b.v, 0);
+    if (total >= here * 1.02 && theirs.length <= 3) offers.push({ tid: s.owner, picks: theirs, total });
+    if (offers.length >= 4) break;
+  }
+  return offers;
+}
+function tradeDownModal() {
+  const L = LEAGUE, d = L.draft, offers = tradeDownOffers(L);
+  TD_OFFERS = offers;
+  modal(`<div class="modal-head"><h2>Trade down from #${d.cur + 1}</h2><button class="btn sm ghost x" data-act="close">✕</button></div>
+    ${offers.length ? offers.map((o, k) => `<div class="card row"><div class="grow"><b>${esc(teamName(L.teams[o.tid]))}</b><div class="small">${o.picks.map(p => `Round ${d.slots[p.i].round}, #${p.i + 1}`).join(' + ')}</div></div><button class="btn sm primary" data-act="td-take" data-k="${k}">Accept</button></div>`).join('') : '<p class="muted">Nobody wants to move up right now.</p>'}`);
+}
+let TD_OFFERS = [];
+document.addEventListener('change', e => {
+  if (e.target.classList && e.target.classList.contains('tu-cb') && TU) { const v = [...document.querySelectorAll('.tu-cb')].filter(c => c.checked).reduce((s, c) => s + TU.mine[+c.dataset.i].v, 0); const el = document.getElementById('tuVal'); if (el) el.textContent = v; }
+});
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el || !LEAGUE) return;
+  const L = LEAGUE, a = el.dataset.act, d = L.draft;
+  if (a === 'draft-up') tradeUpModal();
+  if (a === 'draft-down') tradeDownModal();
+  if (a === 'tu-offer' && TU) {
+    const sel = [...document.querySelectorAll('.tu-cb')].filter(c => c.checked).map(c => TU.mine[+c.dataset.i]);
+    const v = sel.reduce((s, x) => s + x.v, 0);
+    if (!sel.length) return toast('Pick something to offer.');
+    if (v < TU.want) return toast(`${L.teams[TU.tid].abbr} say no — that's not enough.`);
+    for (const x of sel) { if (x.kind === 'slot') d.slots[x.i].owner = TU.tid; else x.pk.owner = TU.tid; }
+    d.slots[d.cur].owner = L.userTid;
+    addNews(L, `🔁 Draft trade: you move up to #${d.cur + 1} with ${L.teams[TU.tid].abbr}.`);
+    TU = null; closeModal(); save(); renderHub(); toast('Trade accepted — you are on the clock!');
+  }
+  if (a === 'td-take') {
+    const o = TD_OFFERS[+el.dataset.k]; if (!o) return;
+    d.slots[d.cur].owner = o.tid; for (const p of o.picks) d.slots[p.i].owner = L.userTid;
+    addNews(L, `🔁 Draft trade: you move down from #${d.cur + 1}, getting ${o.picks.length} picks from ${L.teams[o.tid].abbr}.`);
+    closeModal(); draftAdvance(L, true); save(); renderHub(); toast('Trade done. More picks for you.');
+  }
+});
+const _viewDraftD2 = viewDraft;
+viewDraft = function () {
+  const L = LEAGUE, h = _viewDraftD2();
+  if (L.phase !== 'draft' || !L.draft) return h;
+  const d = L.draft;
+  if (draftDone(L)) {
+    const cg = classGrades(L), mine = (L.dgrades || []).filter(g => g.tid === L.userTid);
+    return `<div class="card"><h2>Draft grades</h2><div class="cols"><div><h3 class="small">Your class</h3>${mine.map(g => { const p = L.players[g.pid]; return `<div class="small"><b class="grade g${g.grade[0]}">${g.grade}</b> #${g.overall} ${p.pos} ${esc(pname(p))}</div>`; }).join('') || '<p class="muted small">No picks.</p>'}</div>
+      <div><h3 class="small">Best classes</h3>${cg.slice(0, 8).map(x => `<div class="small"><b class="grade g${x.grade[0]}">${x.grade}</b> ${esc(L.teams[x.tid].abbr)}${x.tid === L.userTid ? ' (you)' : ''}</div>`).join('')}</div></div></div>` + h;
+  }
+  const mineOnClock = d.slots[d.cur] && d.slots[d.cur].owner === L.userTid;
+  const bar = `<div class="card row"><span class="grow small">${mineOnClock ? 'You are on the clock.' : `${esc(L.teams[d.slots[d.cur].owner].abbr)} are on the clock at #${d.cur + 1}.`}</span>
+    ${mineOnClock ? '<button class="btn sm" data-act="draft-down">Trade down</button>' : '<button class="btn sm" data-act="draft-up">Trade up to this pick</button>'}</div>`;
+  return bar + h;
+};
+
+// ---------------- fantasy draft ----------------
+const FD_ROUNDS = 49;
+function initFantasy(L) {
+  const pool = [];
+  for (const t of L.teams) { for (const id of t.roster) { const p = L.players[id]; p.tid = null; p.ir = false; pool.push(id); } t.roster = []; t.depth = {}; }
+  const order = shuffle(L.teams.map(t => t.id));
+  L.fantasy = { order, round: 1, idx: 0, pool, done: false, log: [] };
+  addNews(L, '🎲 Fantasy draft! Every player in the league is up for grabs. Build your team from scratch.');
+}
+function fdOnClock(L) { const F = L.fantasy, o = F.round % 2 ? F.order : F.order.slice().reverse(); return o[F.idx]; }
+function fdNeed(L, tid, pos) {
+  const n = L.teams[tid].roster.filter(id => L.players[id].pos === pos).length;
+  return n < STARTERS[pos] ? 14 : n < ROSTER_TARGET[pos] ? 3 : -30;
+}
+function fdAIChoice(L, tid) {
+  let best = null, bs = -1e9;
+  const cands = L.fantasy.pool.map(id => L.players[id]).sort((a, b) => b.ovr - a.ovr).slice(0, 120);
+  for (const p of cands) {
+    const s = p.ovr + (p.age <= 25 ? 3 : p.age >= 32 ? -4 : 0) + fdNeed(L, tid, p.pos) - ((p.pos === 'K' || p.pos === 'P') && L.fantasy.round < 30 ? 15 : 0) + gauss(0, 1.5);
+    if (s > bs) { bs = s; best = p; }
+  }
+  return best;
+}
+function fdPick(L, pid) {
+  const F = L.fantasy, tid = fdOnClock(L), p = L.players[pid]; if (!p || !F.pool.includes(pid)) return;
+  F.pool = F.pool.filter(x => x !== pid);
+  addToTeam(L, p, tid);
+  F.log.unshift(`R${F.round}: ${L.teams[tid].abbr} — ${p.pos} ${pname(p)} (${p.ovr})`); F.log.length = Math.min(F.log.length, 12);
+  F.idx++; if (F.idx >= F.order.length) { F.idx = 0; F.round++; }
+  if (F.round > FD_ROUNDS || !F.pool.length) fdFinish(L);
+}
+function fdAdvance(L, stopAtUser) { const F = L.fantasy; while (!F.done && !(stopAtUser && fdOnClock(L) === L.userTid)) { const p = fdAIChoice(L, fdOnClock(L)); if (!p) { fdFinish(L); break; } fdPick(L, p.id); } }
+function fdFinish(L) {
+  const F = L.fantasy; if (F.done) return; F.done = true;
+  for (const id of F.pool) { const p = L.players[id]; p.tid = null; L.fa.push(id); }
+  F.pool = [];
+  for (const t of L.teams) autoDepth(L, t);
+  addNews(L, '✅ Fantasy draft complete. Leftover players are free agents.');
+}
+function viewFantasy() {
+  const L = LEAGUE, F = L.fantasy, t = UT(), mine = fdOnClock(L) === L.userTid;
+  const counts = POSITIONS.map(pos => { const n = t.roster.filter(id => L.players[id].pos === pos).length; return `<span class="pill ${n < STARTERS[pos] ? 'red' : n >= ROSTER_TARGET[pos] ? 'green' : ''}">${pos} ${n}/${ROSTER_TARGET[pos]}</span>`; }).join(' ');
+  const list = F.pool.map(id => L.players[id]).filter(p => FD_FILTER === 'ALL' || p.pos === FD_FILTER).sort((a, b) => b.ovr - a.ovr).slice(0, 60);
+  return `<div class="card"><div class="row"><div class="grow"><h2 style="margin:0">Fantasy Draft</h2><div class="muted small">Round ${F.round} of ${FD_ROUNDS} · ${mine ? '<b style="color:var(--amber)">You are on the clock</b>' : `${esc(L.teams[fdOnClock(L)].abbr)} on the clock`} · ${F.pool.length} players left</div></div>
+      ${mine ? '<button class="btn sm" data-act="fd-auto1">Auto-pick for me</button>' : '<button class="btn sm primary" data-act="fd-sim">Sim to my pick</button>'}<button class="btn sm ghost" data-act="fd-all">Auto-draft the rest</button></div>
+      <div class="row" style="gap:4px;flex-wrap:wrap;margin-top:8px">${counts}</div></div>
+    <div class="cols"><div class="card"><div class="row"><h2 class="grow">Best available</h2><select data-act="fd-filter">${['ALL', ...POSITIONS].map(p => `<option ${FD_FILTER === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>Pos</th><th>Player</th><th class="r">Age</th><th class="r">OVR</th><th class="r">$</th><th></th></tr></thead><tbody>${list.map(p => `<tr><td>${p.pos}</td><td class="click" data-act="player" data-pid="${p.id}">${esc(pname(p))}${p.dev === 'X' ? ' <span class="pill amber">X</span>' : ''}</td><td class="r">${p.age}</td><td class="r">${ovrTag(p.ovr)}</td><td class="r small">${fmtMoney(p.con ? p.con.sal : 0)}</td><td class="r">${mine ? `<button class="btn sm primary" data-act="fd-pick" data-pid="${p.id}">Draft</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>
+      <div class="card"><h2>Recent picks</h2>${F.log.map(x => `<div class="small">${esc(x)}</div>`).join('') || '<p class="muted small">No picks yet.</p>'}
+      <h2 style="margin-top:12px">Your team (${t.roster.length})</h2>${t.roster.map(id => L.players[id]).sort((a, b) => b.ovr - a.ovr).slice(0, 25).map(p => `<div class="small">${p.pos} ${esc(pname(p))} <b>${p.ovr}</b></div>`).join('')}</div></div>`;
+}
+let FD_FILTER = 'ALL';
+const _renderHubFD = renderHub;
+renderHub = function () {
+  _renderHubFD();
+  const L = LEAGUE; if (!L || !L.fantasy || L.fantasy.done) return;
+  $('#tabs').innerHTML = '<button class="tab on">Fantasy Draft</button>';
+  $('#panel').innerHTML = viewFantasy();
+};
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el || !LEAGUE || !LEAGUE.fantasy) return;
+  const L = LEAGUE, a = el.dataset.act;
+  if (a === 'fd-pick') { fdPick(L, +el.dataset.pid); fdAdvance(L, true); save(); renderHub(); }
+  if (a === 'fd-auto1') { const p = fdAIChoice(L, L.userTid); if (p) fdPick(L, p.id); fdAdvance(L, true); save(); renderHub(); }
+  if (a === 'fd-sim') { fdAdvance(L, true); save(); renderHub(); }
+  if (a === 'fd-all') { fdAdvance(L, false); save(); TAB = 'home'; renderHub(); toast('Fantasy draft complete!'); }
+});
+document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.act === 'fd-filter' && LEAGUE) { FD_FILTER = e.target.value; renderHub(); } });
+const _setupGoFD = setupGo;
+setupGo = function () {
+  const fd = document.getElementById('setFD') && document.getElementById('setFD').checked && SETUP.mode === 'franchise';
+  const L = SETUP.tmp;
+  if (fd && L) initFantasy(L);
+  _setupGoFD();
+  if (fd && LEAGUE) { fdAdvance(LEAGUE, true); save(); renderHub(); }
+};
+// no games until the fantasy draft is done
+const _simWeekFD = simWeek;
+simWeek = function (L, inc) { if (L.fantasy && !L.fantasy.done) fdAdvance(L, false); return _simWeekFD(L, inc); };
 
 // ============================================================
 // Gridiron Dynasty - UI glue for the newer features: extra hub tabs,

@@ -4,6 +4,8 @@
     <div class="menu-actions">
       <button class="btn primary" data-act="new-franchise">New Franchise</button>
       <button class="btn" data-act="quick-play">Quick Play</button>
+      <button class="btn" data-act="two-player">2 Players</button>
+      <button class="btn" data-act="watch">Watch a Game</button>
       <button class="btn" data-act="practice">Practice</button>
       <button class="btn" data-act="challenges">Challenges</button>
       <button class="btn" data-act="trophies">🏆 Trophies</button>
@@ -30,6 +32,7 @@
         <label id="awayWrap" hidden>Opponent <select id="setAway"></select></label>
         <label class="row" style="gap:6px"><input type="checkbox" id="setSimDef"> <b>Offense only</b>&nbsp;(CPU drives are simmed)</label>
         <label class="row" style="gap:6px"><input type="checkbox" id="setSS"> <b>Superstar mode</b>&nbsp;(play as one player)</label>
+        <label class="row" style="gap:6px"><input type="checkbox" id="setFD"> <b>Fantasy draft</b>&nbsp;(draft every team from scratch)</label>
         <span id="ssFields" class="row" style="gap:6px" hidden><input id="ssFirst" placeholder="First name" maxlength="16" style="width:110px"><input id="ssLast" placeholder="Last name" maxlength="18" style="width:120px"><select id="ssPos"><option>QB</option><option>RB</option><option selected>WR</option><option>TE</option><option>DL</option><option>LB</option><option>CB</option><option>S</option></select></span>
         <span class="grow"></span>
         <button class="btn primary" data-act="setup-go" id="setupGo" disabled>Start</button>
