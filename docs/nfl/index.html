@@ -455,6 +455,8 @@ table.box td, table.box th { padding: 4px 8px; }
 @keyframes inOut { to { opacity: 0; transform: translateX(-50%) translateY(-30px) scale(.95); } }
 @media (max-width: 700px) { .in-team { min-width: 110px; padding: 10px 12px; } .in-team b { font-size: 22px; } .in-team svg { width: 40px; height: 40px; } }
 
+.g-btn.zoom-btn { z-index: 25; top: calc(60px + env(safe-area-inset-top, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); }
+
 </style></head><body>
 <section id="menu" class="screen">
   <div class="menu-inner wrap">
@@ -518,6 +520,7 @@ table.box td, table.box th { padding: 4px 8px; }
   <button class="btn sm primary replay-btn" id="replayBtn" data-act="replay" hidden>▶ Replay</button>
   <div class="scorebug" id="scorebug"></div>
   <button class="g-btn" id="pauseBtn" aria-label="Pause">❚❚</button>
+  <button class="g-btn zoom-btn" id="zoomBtn" data-act="cam-zoom" aria-label="Zoom" hidden>🔍</button>
   <div class="rotate-tip">Turn your phone sideways for the best view</div>
   <div class="banner" id="banner" hidden></div>
   <div class="hint" id="hint" hidden></div>
@@ -4615,14 +4618,18 @@ LiveGame.prototype.renderGL = function (ctx, W, H) {
   // camera: high, behind the offense, long lens
   const portrait = H > W * 1.05;
   const pocket = this.phase === 'pre' || this.phase === 'call' || (this.phase === 'live' && this.carrier() === this.passer && this.passReady && !this.play.crossed);
-  this.glBack = (this.glBack == null ? 38 : this.glBack) + ((pocket ? 38 : 34) - (this.glBack == null ? 38 : this.glBack)) * 0.06;
-  const cy = clamp(this.cam.y, MID_Y - 14, MID_Y + 14);
+  // phones held upright: tilt higher and pull back so the whole width of the play fits (zoom button to get closer)
+  const vf = portrait ? 64 : 40;
+  let backT = pocket ? 38 : 34;
+  if (portrait) { const wantW = this.zoomClose ? 30 : 47; backT = clamp((wantW / 2) / (Math.tan(vf * Math.PI / 360) * (W / H)) / 1.22, 26, 95); }
+  this.glBack = (this.glBack == null ? backT : this.glBack) + (backT - (this.glBack == null ? backT : this.glBack)) * 0.06;
+  const cy = clamp(this.cam.y, MID_Y - (portrait && !this.zoomClose ? 5 : 14), MID_Y + (portrait && !this.zoomClose ? 5 : 14));
   const fastCam = this.ball && (this.ball.state === 'air' || this.ball.state === 'pitch' || (this.play && (this.play.caught || this.play.int)));
   this.glCamY = this.glCamY == null ? cy : this.glCamY + (cy - this.glCamY) * (fastCam ? 0.12 : 0.08);
   const fx = this.cam.x;
-  camera.fov = portrait ? 58 : 40; camera.updateProjectionMatrix();
-  camera.position.copy(W2T(fx - this.glBack, this.glCamY, this.glBack * 0.72));
-  camera.lookAt(W2T(fx - 3, this.glCamY, 0));
+  camera.fov = vf; camera.updateProjectionMatrix();
+  if (portrait) { camera.position.copy(W2T(fx - this.glBack * 0.62, this.glCamY, this.glBack * 1.05)); camera.lookAt(W2T(fx + 3, this.glCamY, 0)); }
+  else { camera.position.copy(W2T(fx - this.glBack, this.glCamY, this.glBack * 0.72)); camera.lookAt(W2T(fx - 3, this.glCamY, 0)); }
   S.sun.target.position.copy(W2T(fx + 8, this.glCamY, 0)); S.sun.position.copy(W2T(fx - 10, this.glCamY - 30, 70));
   // lines
   const show = ['pre', 'live', 'call', 'kick'].includes(this.phase);
@@ -4832,19 +4839,23 @@ try { window.__mute = localStorage.getItem('gd_mute') === '1'; } catch (e) { }
 function renderMenu() {
   show('menu');
   $('#fanNote').hidden = !hasRealData();
-  const box = $('#slots'); let h = '';
-  for (let s = 1; s <= 3; s++) {
+  const box = $('#slots'); let h = ''; let shownEmpty = false, used = 0;
+  for (let s = 1; s <= SLOT_COUNT; s++) if (saveMeta(s)) used++;
+  for (let s = 1; s <= SLOT_COUNT; s++) {
     const m = saveMeta(s);
+    if (!m && shownEmpty) continue; if (!m) shownEmpty = true;
     if (m) h += `<div class="slot"><div class="row">${badge({ abbr: m.abbr, c1: m.c1, c2: m.c2, name: m.team.split(' ').slice(-1)[0], city: '' })}<div class="grow"><h3>${esc(m.team)}</h3><div class="muted small">${m.season} · ${phaseLabel(m.phase, m.week)} · ${m.rec}</div></div></div>
       <div class="row"><button class="btn primary sm" data-act="load" data-slot="${s}">Continue</button><button class="btn danger sm" data-act="del-slot" data-slot="${s}">Delete</button></div></div>`;
     else h += `<div class="slot"><h3 class="muted">Slot ${s} — empty</h3><div><button class="btn sm" data-act="new-franchise" data-slot="${s}">Start franchise here</button></div></div>`;
   }
+  h += `<p class="muted small" style="grid-column:1/-1">${used} of ${SLOT_COUNT} franchise slots used.</p>`;
   box.innerHTML = h;
 }
 function phaseLabel(ph, wk) {
   return { regular: 'Week ' + wk, playoffs: 'Playoffs', recap: 'Season recap', resign: 'Re-sign players', fa: 'Free agency', draft: 'Draft' }[ph] || ph;
 }
-function firstFreeSlot() { for (let s = 1; s <= 3; s++) if (!saveMeta(s)) return s; return 1; }
+const SLOT_COUNT = 10;
+function firstFreeSlot() { for (let s = 1; s <= SLOT_COUNT; s++) if (!saveMeta(s)) return s; return 1; }
 
 // ============================================================ SETUP
 let SETUP = { mode: 'franchise', tid: null, slot: 1, tmp: null };
@@ -5216,7 +5227,7 @@ function exportSave() {
 }
 function importSave() {
   modal(`<div class="modal-head"><h2>Import save</h2><button class="btn sm ghost x" data-act="close">✕</button></div>
-    <p class="small muted">Paste exported save text, or pick a .json file. It goes into slot <select id="impSlot"><option>1</option><option>2</option><option>3</option></select>, replacing what is there.</p>
+    <p class="small muted">Paste exported save text, or pick a .json file. It goes into slot <select id="impSlot">${Array.from({ length: SLOT_COUNT }, (_, i) => `<option>${i + 1}</option>`).join('')}</select>, replacing what is there.</p>
     <textarea id="importTxt" rows="6" style="width:100%" placeholder="Paste save text here"></textarea>
     <div class="row"><button class="btn primary" data-act="do-import">Import</button><button class="btn" data-act="import-file">Choose file…</button></div>`);
 }
@@ -8856,6 +8867,25 @@ startLiveGame = function (hid, aid, userTid, opts) {
 document.addEventListener('change', e => {
   if (e.target.id === 'setSS') { const f = document.getElementById('ssFields'); if (f) f.hidden = !e.target.checked; }
 });
+
+// phones held upright: zoom toggle (wide view by default)
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act="cam-zoom"]'); if (!el || !GAME) return;
+  const lg = GAME.live; lg.zoomClose = !lg.zoomClose; try { localStorage.setItem('gd_zoom', lg.zoomClose ? '1' : '0'); } catch (err) { }
+  toast(lg.zoomClose ? 'Close-up camera' : 'Wide camera — see the whole play', 1500);
+});
+const _startLiveZ = startLiveGame;
+startLiveGame = function (hid, aid, userTid, opts) {
+  _startLiveZ(hid, aid, userTid, opts);
+  if (GAME) { try { GAME.live.zoomClose = localStorage.getItem('gd_zoom') === '1'; } catch (err) { } }
+};
+const _updateHUDZ = updateHUD;
+updateHUD = function () {
+  _updateHUDZ();
+  const zb = document.getElementById('zoomBtn'); if (!zb || !GAME) return;
+  const cv = document.getElementById('cv'), portrait = cv && cv.clientHeight > cv.clientWidth * 1.05;
+  zb.hidden = !(portrait && GAME.live.camMode === 'gl');
+};
 
 </script>
 <script>if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});</script>

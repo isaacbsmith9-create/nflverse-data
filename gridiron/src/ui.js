@@ -22,19 +22,23 @@ try { window.__mute = localStorage.getItem('gd_mute') === '1'; } catch (e) { }
 function renderMenu() {
   show('menu');
   $('#fanNote').hidden = !hasRealData();
-  const box = $('#slots'); let h = '';
-  for (let s = 1; s <= 3; s++) {
+  const box = $('#slots'); let h = ''; let shownEmpty = false, used = 0;
+  for (let s = 1; s <= SLOT_COUNT; s++) if (saveMeta(s)) used++;
+  for (let s = 1; s <= SLOT_COUNT; s++) {
     const m = saveMeta(s);
+    if (!m && shownEmpty) continue; if (!m) shownEmpty = true;
     if (m) h += `<div class="slot"><div class="row">${badge({ abbr: m.abbr, c1: m.c1, c2: m.c2, name: m.team.split(' ').slice(-1)[0], city: '' })}<div class="grow"><h3>${esc(m.team)}</h3><div class="muted small">${m.season} · ${phaseLabel(m.phase, m.week)} · ${m.rec}</div></div></div>
       <div class="row"><button class="btn primary sm" data-act="load" data-slot="${s}">Continue</button><button class="btn danger sm" data-act="del-slot" data-slot="${s}">Delete</button></div></div>`;
     else h += `<div class="slot"><h3 class="muted">Slot ${s} — empty</h3><div><button class="btn sm" data-act="new-franchise" data-slot="${s}">Start franchise here</button></div></div>`;
   }
+  h += `<p class="muted small" style="grid-column:1/-1">${used} of ${SLOT_COUNT} franchise slots used.</p>`;
   box.innerHTML = h;
 }
 function phaseLabel(ph, wk) {
   return { regular: 'Week ' + wk, playoffs: 'Playoffs', recap: 'Season recap', resign: 'Re-sign players', fa: 'Free agency', draft: 'Draft' }[ph] || ph;
 }
-function firstFreeSlot() { for (let s = 1; s <= 3; s++) if (!saveMeta(s)) return s; return 1; }
+const SLOT_COUNT = 10;
+function firstFreeSlot() { for (let s = 1; s <= SLOT_COUNT; s++) if (!saveMeta(s)) return s; return 1; }
 
 // ============================================================ SETUP
 let SETUP = { mode: 'franchise', tid: null, slot: 1, tmp: null };
@@ -406,7 +410,7 @@ function exportSave() {
 }
 function importSave() {
   modal(`<div class="modal-head"><h2>Import save</h2><button class="btn sm ghost x" data-act="close">✕</button></div>
-    <p class="small muted">Paste exported save text, or pick a .json file. It goes into slot <select id="impSlot"><option>1</option><option>2</option><option>3</option></select>, replacing what is there.</p>
+    <p class="small muted">Paste exported save text, or pick a .json file. It goes into slot <select id="impSlot">${Array.from({ length: SLOT_COUNT }, (_, i) => `<option>${i + 1}</option>`).join('')}</select>, replacing what is there.</p>
     <textarea id="importTxt" rows="6" style="width:100%" placeholder="Paste save text here"></textarea>
     <div class="row"><button class="btn primary" data-act="do-import">Import</button><button class="btn" data-act="import-file">Choose file…</button></div>`);
 }

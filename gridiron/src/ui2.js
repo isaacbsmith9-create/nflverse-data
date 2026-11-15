@@ -50,3 +50,22 @@ startLiveGame = function (hid, aid, userTid, opts) {
 document.addEventListener('change', e => {
   if (e.target.id === 'setSS') { const f = document.getElementById('ssFields'); if (f) f.hidden = !e.target.checked; }
 });
+
+// phones held upright: zoom toggle (wide view by default)
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act="cam-zoom"]'); if (!el || !GAME) return;
+  const lg = GAME.live; lg.zoomClose = !lg.zoomClose; try { localStorage.setItem('gd_zoom', lg.zoomClose ? '1' : '0'); } catch (err) { }
+  toast(lg.zoomClose ? 'Close-up camera' : 'Wide camera — see the whole play', 1500);
+});
+const _startLiveZ = startLiveGame;
+startLiveGame = function (hid, aid, userTid, opts) {
+  _startLiveZ(hid, aid, userTid, opts);
+  if (GAME) { try { GAME.live.zoomClose = localStorage.getItem('gd_zoom') === '1'; } catch (err) { } }
+};
+const _updateHUDZ = updateHUD;
+updateHUD = function () {
+  _updateHUDZ();
+  const zb = document.getElementById('zoomBtn'); if (!zb || !GAME) return;
+  const cv = document.getElementById('cv'), portrait = cv && cv.clientHeight > cv.clientWidth * 1.05;
+  zb.hidden = !(portrait && GAME.live.camMode === 'gl');
+};
