@@ -61,6 +61,7 @@ makePlayerModel = function (team, home, num, side, role, opts = {}) {
   const mHelm = stdMat(ref ? '#111111' : team.c1, { roughness: 0.22, metalness: 0.38 }), mMask = stdMat(ref ? '#111111' : (num % 2 ? '#d8d8d8' : shade(team.c2 || '#888', -0.1)), { metalness: 0.55, roughness: 0.32 });
   const mTrim = stdMat(trim), mGlove = stdMat(pos === 'OL' || pos === 'DL' ? '#151515' : trim, { roughness: 0.5 }), mWhite = stdMat('#f4f4f4');
   const cast = o => { o.castShadow = true; return o; };
+  const parts = { hands: [], cleats: [] };
   const root = new T.Group(), tilt = new T.Group(); root.add(tilt);
   const body = new T.Group(); body.scale.set(bw, bh, bw); tilt.add(body);
   const hips = new T.Group(); hips.position.y = 0.95; body.add(hips);
@@ -74,7 +75,7 @@ makePlayerModel = function (team, home, num, side, role, opts = {}) {
     const kp = new T.Mesh(G.kneePad, mP); kp.scale.set(1, 0.8, 0.7); kp.position.set(0, 0.01, 0.05); knee.add(kp);
     const sh = cast(new T.Mesh(G.shin, mS)); sh.position.y = -0.23; knee.add(sh);
     const sb = new T.Mesh(G.band, ref ? mS : mWhite); sb.position.y = -0.08; knee.add(sb);
-    const ft = cast(new T.Mesh(G.cleat, mShoe)); ft.position.set(0, -0.455, 0.05); knee.add(ft);
+    const ft = cast(new T.Mesh(G.cleat, mShoe)); ft.position.set(0, -0.455, 0.05); knee.add(ft); parts.cleats.push(ft);
     const so = new T.Mesh(G.sole, mSole); so.position.set(0, -0.495, 0.05); knee.add(so);
     return { hip, knee };
   });
@@ -98,7 +99,7 @@ makePlayerModel = function (team, home, num, side, role, opts = {}) {
     const el = new T.Group(); el.position.y = -0.32; sh.add(el);
     const fa = cast(new T.Mesh(G.foreArm, mSk)); fa.position.y = -0.15; el.add(fa);
     const wr = new T.Mesh(G.wrist, mWhite); wr.position.y = -0.27; el.add(wr);
-    const hd = cast(new T.Mesh(G.hand, ref ? mSk : mGlove)); hd.scale.set(1, 1.15, 0.8); hd.position.y = -0.33; el.add(hd);
+    const hd = cast(new T.Mesh(G.hand, ref ? mSk : mGlove)); hd.scale.set(1, 1.15, 0.8); hd.position.y = -0.33; el.add(hd); parts.hands.push(hd);
     return { sh, el, hd };
   });
   const head = new T.Group(); head.position.y = 0.93; torso.add(head);
@@ -112,7 +113,7 @@ makePlayerModel = function (team, home, num, side, role, opts = {}) {
     const vb = new T.Mesh(G.vbar, mMask); vb.position.set(0, -0.08, 0.235); head.add(vb);
     if ((pos === 'WR' || pos === 'CB' || pos === 'S' || pos === 'QB') && num % 3 === 1) { const vi = new T.Mesh(G.visor, stdMat('#0b0f14', { roughness: 0.1, metalness: 0.6 })); vi.position.set(0, 0.03, 0.226); head.add(vi); }
   }
-  return { root, tilt, body, hips, legs, torso, arms, head, yaw: side === 'O' ? Math.PI : 0 };
+  return { root, tilt, body, hips, legs, torso, arms, head, parts, yaw: side === 'O' ? Math.PI : 0 };
 };
 
 // ---------- time of day ----------
@@ -224,7 +225,7 @@ LGX.renderGL = function (ctx, W, H) {
   // detailed models with names (created before the base renderer looks them up)
   if (this.gl && this.ents) for (const e of this.ents) {
     const side = e.side === 'O' ? this.gs.poss : 1 - this.gs.poss, mk = e.p.id + ':' + side + ':' + e.role.replace(/[0-9]/, '');
-    if (!this.gl.models[mk]) { const m = makePlayerModel(this.teamOf(side), side === 0, e.p.num, e.side, e.role, { name: e.p.scrub ? '' : e.p.last }); this.gl.models[mk] = m; this.gl.scene.add(m.root); }
+    if (!this.gl.models[mk]) { const m = makePlayerModel(this.teamOf(side), side === 0, e.p.num, e.side, e.role, { name: e.p.scrub ? '' : e.p.last, gear: e.p.star && LEAGUE && LEAGUE.superstar ? LEAGUE.superstar.gear : null }); this.gl.models[mk] = m; this.gl.scene.add(m.root); }
   }
   // pregame fly-in, replay camera, shake
   if (this.introT != null) { this.introT += 1 / 60; if (this.introT < 3.2) this.glBack = Math.min(this.cam.x + 30, Math.max(this.glBack || 0, 40 + (3.2 - this.introT) * 22)); else this.introT = null; }

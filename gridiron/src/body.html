@@ -33,7 +33,7 @@
         <label class="row" style="gap:6px"><input type="checkbox" id="setSimDef"> <b>Offense only</b>&nbsp;(CPU drives are simmed)</label>
         <label class="row" style="gap:6px"><input type="checkbox" id="setSS"> <b>Superstar mode</b>&nbsp;(play as one player)</label>
         <label class="row" style="gap:6px"><input type="checkbox" id="setFD"> <b>Fantasy draft</b>&nbsp;(draft every team from scratch)</label>
-        <span id="ssFields" class="row" style="gap:6px" hidden><input id="ssFirst" placeholder="First name" maxlength="16" style="width:110px"><input id="ssLast" placeholder="Last name" maxlength="18" style="width:120px"><select id="ssPos"><option>QB</option><option>RB</option><option selected>WR</option><option>TE</option><option>DL</option><option>LB</option><option>CB</option><option>S</option></select></span>
+        <span id="ssFields" class="row" style="gap:6px" hidden><input id="ssFirst" placeholder="First name" maxlength="16" style="width:110px"><input id="ssLast" placeholder="Last name" maxlength="18" style="width:120px"><input id="ssNum" type="number" min="0" max="99" placeholder="#" style="width:60px"><select id="ssArch"></select><select id="ssPos"><option>QB</option><option>RB</option><option selected>WR</option><option>TE</option><option>DL</option><option>LB</option><option>CB</option><option>S</option></select></span>
         <span class="grow"></span>
         <button class="btn primary" data-act="setup-go" id="setupGo" disabled>Start</button>
       </div>
