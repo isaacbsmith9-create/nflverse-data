@@ -8969,7 +8969,7 @@ recordGame = function (L, g, res) {
   if (!p || !res.box || (g.h !== p.tid && g.a !== p.tid)) return;
   const b = res.box[p.id] || {}, home = g.h === p.tid, us = home ? g.hs : g.as, them = home ? g.as : g.hs, won = us > them;
   const perf = ssPerf(p, b), grade = ssGrade(perf), xp = s.xp - xp0;
-  const dTrust = { 'A+': 9, A: 7, 'B+': 4, B: 2, C: 0, D: -4, F: -7 }[grade] + (won ? 1 : -1);
+  const dTrust = { 'A+': 6, A: 4, 'B+': 2, B: 1, C: -1, D: -4, F: -6 }[grade] + (won ? 1 : -1);
   s.trust = clamp(s.trust + dTrust, 0, 100);
   const tds = (b.ptd || 0) + (b.rtd || 0) + (b.rctd || 0) + (b.dint || 0) * 0.5 + (b.sk || 0) * 0.4;
   const gain = Math.round((s.fans * 0.015 + 300) * (1 + perf / 10) * (won ? 1.2 : 0.9) + tds * 2500 * (1 + s.fans / 4e5));
