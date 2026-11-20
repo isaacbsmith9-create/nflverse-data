@@ -468,8 +468,8 @@ table.box td, table.box th { padding: 4px 8px; }
 
 /* ---- superstar 2 ---- */
 .ab-chip { color: #ffd23f; font-size: .8em; }
-.meter { display: grid; grid-template-columns: 110px 1fr 54px; gap: 10px; align-items: center; font-size: 14px; margin: 8px 0; }
-.meter .bar { margin: 0; height: 10px; } .meter b { text-align: right; }
+.ssmeter { display: grid; grid-template-columns: 110px 1fr 54px; gap: 10px; align-items: center; font-size: 14px; margin: 8px 0; }
+.ssmeter .bar { display: block; margin: 0; height: 10px; } .ssmeter b { text-align: right; } .ssmeter span { font-size: 13px; }
 .brand { display: flex; gap: 22px; margin-bottom: 10px; } .brand div { display: flex; flex-direction: column; } .brand b { font: 800 30px/1 var(--f-display); color: var(--amber); } .brand span { font-size: 12px; color: var(--muted); }
 .deals { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
 .deal { background: var(--bg3); border-radius: 8px; padding: 6px 10px; display: flex; flex-direction: column; font-size: 13px; opacity: .55; } .deal.got { opacity: 1; border: 1px solid var(--amber); } .deal span { font-size: 12px; color: var(--muted); }
@@ -489,6 +489,13 @@ table.box td, table.box th { padding: 4px 8px; }
 .tr-reps { display: flex; gap: 6px; min-height: 28px; } .tr-rep { padding: 3px 10px; border-radius: 99px; font-weight: 800; font-size: 13px; background: var(--bg3); }
 .tr-rep.perfect { background: #ffd23f; color: #1a1300; } .tr-rep.good { background: #1e5a39; color: #c9f5da; } .tr-rep.ok { background: #23415a; } .tr-rep.miss { background: #5a1e1e; }
 .tr-go { font-size: 22px; padding: 14px 40px; touch-action: manipulation; }
+
+/* ---- superstar focused home ---- */
+.ss-home { display: flex; gap: 16px; align-items: center; background: linear-gradient(110deg, color-mix(in srgb, var(--c1) 55%, var(--bg2)), var(--bg2) 75%); }
+@media (max-width: 600px) { .ss-home { flex-wrap: wrap; } .ss-home .ss-num { font-size: 44px; min-width: 50px; } }
+.ssm-track { height: 10px; border-radius: 6px; background: rgba(255,255,255,.12); overflow: hidden; min-width: 80px; }
+.ssm-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, #ffb81c, #ffd23f); }
+.ss-home .grow { min-width: 0; } .ss-home .ssmeter { max-width: 100% !important; grid-template-columns: auto 1fr 34px; }
 
 </style>
 <section id="menu" class="screen">
@@ -7234,7 +7241,7 @@ LSS.liveStep = function (dt) {
     if (inp.actionEdge && s.side === 'O' && car !== s && car === this.passer && this.passReady && !pl.thrown && this.eligible.includes(s)) {
       inp.actionEdge = false;
       const open = this.openness ? this.openness(s) : 1;
-      if (open > 0.9 || chance(0.35)) { this.throwBall(s); this.h.toast && this.h.toast('QB heard you — ball\'s coming!', 1200); }
+      if (open > 1.6 || (open > 1.0 && chance(0.4))) { this.throwBall(s); this.h.toast && this.h.toast('QB heard you — ball\'s coming!', 1200); }
       else this.h.toast && this.h.toast('Covered — the QB looks elsewhere.', 1200);
     }
     inp.sw = false;
@@ -7243,7 +7250,7 @@ LSS.liveStep = function (dt) {
 };
 // the QB likes throwing to the star
 const _opennessSS = LSS.openness;
-LSS.openness = function (r) { const v = _opennessSS.call(this, r); const p = ssPlayer(this.L); return p && r.p && r.p.id === p.id && this.passer !== this.ctrl ? v + 0.7 : v; };
+LSS.openness = function (r) { const v = _opennessSS.call(this, r); const p = ssPlayer(this.L); return p && r.p && r.p.id === p.id && this.passer !== this.ctrl ? v + 0.25 : v; };
 
 // ---------- setup screen + My Player tab ----------
 const _setupGoSS = setupGo;
@@ -8937,7 +8944,7 @@ autoOffCall = function (gs) {
 const _opennessSS2 = LiveGame.prototype.openness;
 LiveGame.prototype.openness = function (r) {
   const v = _opennessSS2.call(this, r), s = this.L && ssS(this.L);
-  if (s && r.p && r.p.star && this.passer !== this.ctrl) return v + (s.trust - 50) / 80 + (this._featured ? 0.6 : 0);
+  if (s && r.p && r.p.star && this.passer !== this.ctrl) return v + clamp((s.trust - 50) / 160, -0.3, 0.3) + (this._featured ? 0.3 : 0);
   return v;
 };
 const _nextSS2 = LiveGame.prototype.next;
@@ -9086,7 +9093,7 @@ viewStar = function () {
   // trust + brand strip under the hero card
   const deals = SS_DEALS.map(([need, name, pay]) => `<div class="deal ${s.deals.includes(name) ? 'got' : ''}"><b>${name}</b><span>${s.deals.includes(name) ? `$${pay}M/yr` : `${(need / 1000 >= 1000 ? need / 1e6 + 'M' : need / 1000 + 'K')} followers`}</span></div>`).join('');
   const strip = `<div class="cols"><div class="card"><h2>${esc(s.arch || p.pos)}${a ? ` · <span class="ab-chip">★ ${ABIL[a][0]}</span>` : ''}</h2><p class="small muted">${a ? ABIL[a][1] + '. Turns on when you get In the Zone (a couple of big plays).' : ''}</p>
-      <div class="meter"><span>Coach trust</span><div class="bar"><i style="width:${s.trust}%"></i></div><b>${Math.round(s.trust)}</b></div>
+      <div class="ssmeter"><span>Coach trust</span><div class="ssm-track"><div class="ssm-fill" style="width:${s.trust}%"></div></div><b>${Math.round(s.trust)}</b></div>
       <p class="small muted">${p.pos === 'QB' ? 'High trust means more freedom and a stronger supporting cast.' : SS_OFF.includes(p.pos) ? 'High trust means more plays designed for you and the QB looks your way more.' : 'High trust earns you more big-play chances.'} Grades of B or better raise it.</p></div>
     <div class="card"><h2>Brand</h2><div class="brand"><div><b>${s.fans >= 1e6 ? (s.fans / 1e6).toFixed(2) + 'M' : s.fans >= 1000 ? (s.fans / 1000).toFixed(1) + 'K' : s.fans}</b><span>followers</span></div><div><b>$${s.cash.toFixed(1)}M</b><span>to spend</span></div></div><div class="deals">${deals}</div></div></div>`;
   // training
@@ -9095,7 +9102,7 @@ viewStar = function () {
   // badges + legacy
   const tot = ssTot(p), legacy = Math.round(typeof hofScore === 'function' ? hofScore(p, tot) : 0);
   const badges = `<div class="card"><h2>Milestones <span class="muted small">${Object.keys(s.badges).length}/${SS_BADGES.length}</span></h2><div class="badges">${SS_BADGES.map(([id, name]) => `<span class="badge ${s.badges[id] ? 'got' : ''}">${s.badges[id] ? '🏅' : '🔒'} ${name}</span>`).join('')}</div>
-    <h2 style="margin-top:12px">Hall of Fame legacy</h2><div class="meter"><span>Legacy</span><div class="bar"><i style="width:${Math.min(100, legacy / 2.4)}%"></i></div><b>${legacy}/240</b></div><p class="small muted">Five or more seasons, a legacy score of 240 and All-Pro teams or awards punch your ticket.</p></div>`;
+    <h2 style="margin-top:12px">Hall of Fame legacy</h2><div class="ssmeter"><span>Legacy</span><div class="ssm-track"><div class="ssm-fill" style="width:${Math.min(100, legacy / 2.4)}%"></div></div><b>${legacy}/240</b></div><p class="small muted">Five or more seasons, a legacy score of 240 and All-Pro teams or awards punch your ticket.</p></div>`;
   // gear
   const shop = `<div class="card"><h2>Gear locker</h2><div class="gear">${Object.entries(SS_GEAR).map(([slot, items]) => `<label>${slot[0].toUpperCase() + slot.slice(1)} <select data-act="ss-gear" data-slot="${slot}">${items.map(([id, n, cost]) => { const own = !cost || s.owned[slot + ':' + id]; return `<option value="${id}" ${s.gear[slot] === id ? 'selected' : ''}>${n}${own ? '' : ` — $${cost}M`}</option>`; }).join('')}</select></label>`).join('')}</div><p class="small muted">Gear shows up on your player in the 3D view. Endorsement money pays for it.</p></div>`;
   // game log
@@ -9117,6 +9124,90 @@ document.addEventListener('change', e => {
   if (item[2] && !s.owned[key]) { if (s.cash < item[2]) { toast(`You need $${item[2]}M — grow your brand to land endorsement deals.`); renderHub(); return; } s.cash = Math.round((s.cash - item[2]) * 100) / 100; s.owned[key] = true; toast(`Bought: ${item[1]}`); }
   s.gear[slot] = id; save(); renderHub();
 });
+
+// ============================================================
+// Gridiron Dynasty - catch assist for the receiver you control.
+// The ball is aimed where the receiver is going; if you steer him
+// a step off that spot, he still gets to it (within reach), and a
+// receiver who is open hangs onto clean catches.
+// ============================================================
+'use strict';
+const LCF = LiveGame.prototype;
+// while the ball is in the air to you: gently pull your receiver to the catch spot
+const _liveStepCF = LCF.liveStep;
+LCF.liveStep = function (dt) {
+  const b = this.ball, r = this.play && this.play.target;
+  if (b && b.state === 'air' && r && r === this.ctrl && r.side === 'O') {
+    const left = b.T - b.t, dx = b.tx - r.x, dy = b.ty - r.y, d = Math.hypot(dx, dy);
+    if (d > 0.3 && left < 0.9) { const k = Math.min(1, dt * (left < 0.4 ? 9 : 4)); r.x += dx * k * 0.75; r.y += dy * k * 0.75; }
+  }
+  return _liveStepCF.call(this, dt);
+};
+// at the catch: snap a controlled receiver onto the ball if he is close, and fewer drops when nobody is on him
+const _resolveCF = LCF.resolvePass;
+LCF.resolvePass = function () {
+  const b = this.ball, r = this.play && this.play.target;
+  if (!r || r.side !== 'O') return _resolveCF.call(this);
+  const mine = r === this.ctrl || (r.p && r.p.star);
+  const rd = Math.hypot(r.x - b.tx, r.y - b.ty);
+  if (mine && rd < 3.2) { r.x += (b.tx - r.x) * 0.75; r.y += (b.ty - r.y) * 0.75; }
+  let nearD = 99; for (const e of this.ents) if (e.side === 'D') nearD = Math.min(nearD, Math.hypot(e.x - b.tx, e.y - b.ty));
+  const boost = mine ? (nearD > 2.2 ? 16 : 7) : (nearD > 2.2 ? 6 : 0);
+  r.r.cat += boost;
+  try { return _resolveCF.call(this); } finally { r.r.cat -= boost; }
+};
+
+// ============================================================
+// Gridiron Dynasty - Superstar screen: when you play as one player the
+// hub only shows what a player cares about. GM tabs (free agents,
+// development, contracts...) are hidden unless you switch them back on.
+// ============================================================
+'use strict';
+
+const SS_TABS = ['home', 'star', 'schedule', 'standings', 'stats', 'rankings', 'records', 'playbook', 'settings'];
+const TABS_ALL = TABS.slice();
+const ssFocus = L => !!(L && L.superstar && !EXHIB && !(L.settings && L.settings.ssGM));
+const _renderHubSSUI = renderHub;
+renderHub = function () {
+  const L = LEAGUE;
+  TABS.length = 0;
+  if (ssFocus(L)) {
+    const keep = SS_TABS.slice(); if (L.phase === 'draft') keep.splice(2, 0, 'draft');
+    for (const t of TABS_ALL) if (keep.includes(t[0])) TABS.push(t[0] === 'star' ? ['star', '⭐ My Player'] : t);
+    TABS.splice(1, 0, TABS.splice(TABS.findIndex(t => t[0] === 'star'), 1)[0]);
+    if (!TABS.some(t => t[0] === TAB)) TAB = 'star';
+    document.body.classList.add('ss-focus');
+  } else { TABS.push(...TABS_ALL); document.body.classList.remove('ss-focus'); }
+  return _renderHubSSUI();
+};
+// Home in Superstar mode: your player first
+const _viewHomeSSUI = viewHome;
+viewHome = function () {
+  const L = LEAGUE, base = _viewHomeSSUI();
+  if (!ssFocus(L)) return base;
+  const p = ssPlayer(L), s = ssS(L); if (!p) return base;
+  const st = p.st || {}, last = s.games[0];
+  const line = SS_OFF.includes(p.pos) ? (p.pos === 'QB' ? `${st.pc || 0}/${st.pa || 0} · ${st.py || 0} yds · ${st.ptd || 0} TD · ${st.pint || 0} INT` : `${st.rec || 0} rec · ${(st.rcy || 0) + (st.ry || 0)} yds · ${(st.rtd || 0) + (st.rctd || 0)} TD`) : `${st.tk || 0} tkl · ${st.sk || 0} sk · ${st.dint || 0} INT`;
+  const card = `<div class="card ss-home" style="--c1:${L.teams[p.tid] ? L.teams[p.tid].c1 : '#333'}"><div class="ss-num">${p.num}</div><div class="grow"><div class="eyebrow">${esc(s.arch || p.pos)} · ${p.pos}</div><div class="hub-title" style="font-size:26px">${esc(pname(p))}</div>
+    <div class="small">${L.season}: ${line}${last ? ` · last game <b class="grade g${last.grade[0]}">${last.grade}</b>` : ''}</div>
+    <div class="ssmeter" style="max-width:420px"><span>Coach trust</span><div class="ssm-track"><div class="ssm-fill" style="width:${s.trust}%"></div></div><b>${Math.round(s.trust)}</b></div></div>
+    <div class="ring big" style="--v:${p.ovr}"><b>${p.ovr}</b><span>OVR</span></div></div>`;
+  // drop the GM-only cards (key starters / league news stay)
+  return card + base.replace(/<div class="card"><h2>Key starters<\/h2>[\s\S]*?<\/table><\/div><\/div>/, '');
+};
+// toggle in My Player and Settings
+const _viewStarSSUI = viewStar;
+viewStar = function () {
+  const L = LEAGUE, h = _viewStarSSUI();
+  if (!ssPlayer(L)) return h;
+  return h + `<div class="card row"><label class="row grow" style="gap:8px"><input type="checkbox" data-act="ss-gm" ${L.settings.ssGM ? 'checked' : ''}> <b>Show GM tools</b> <span class="muted small">— roster, free agents, development, contracts, trades and more</span></label></div>`;
+};
+document.addEventListener('change', e => {
+  if (e.target.dataset && e.target.dataset.act === 'ss-gm' && LEAGUE) { LEAGUE.settings.ssGM = e.target.checked; save(); renderHub(); toast(e.target.checked ? 'GM tools shown.' : 'Player view: GM tools hidden.'); }
+});
+// the front office handles the roster for you when GM tools are hidden
+const _simWeekSSUI = simWeek;
+simWeek = function (L, inc) { if (ssFocus(L)) { const t = L.teams[L.userTid]; autoDepth(L, t); const p = ssPlayer(L); if (p && !p.inj) t.depth[p.pos] = [p.id, ...t.depth[p.pos].filter(id => id !== p.id)]; } return _simWeekSSUI(L, inc); };
 
 // ============================================================
 // Gridiron Dynasty - UI glue for the newer features: extra hub tabs,

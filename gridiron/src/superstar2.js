@@ -89,7 +89,7 @@ autoOffCall = function (gs) {
 const _opennessSS2 = LiveGame.prototype.openness;
 LiveGame.prototype.openness = function (r) {
   const v = _opennessSS2.call(this, r), s = this.L && ssS(this.L);
-  if (s && r.p && r.p.star && this.passer !== this.ctrl) return v + (s.trust - 50) / 80 + (this._featured ? 0.6 : 0);
+  if (s && r.p && r.p.star && this.passer !== this.ctrl) return v + clamp((s.trust - 50) / 160, -0.3, 0.3) + (this._featured ? 0.3 : 0);
   return v;
 };
 const _nextSS2 = LiveGame.prototype.next;
@@ -238,7 +238,7 @@ viewStar = function () {
   // trust + brand strip under the hero card
   const deals = SS_DEALS.map(([need, name, pay]) => `<div class="deal ${s.deals.includes(name) ? 'got' : ''}"><b>${name}</b><span>${s.deals.includes(name) ? `$${pay}M/yr` : `${(need / 1000 >= 1000 ? need / 1e6 + 'M' : need / 1000 + 'K')} followers`}</span></div>`).join('');
   const strip = `<div class="cols"><div class="card"><h2>${esc(s.arch || p.pos)}${a ? ` · <span class="ab-chip">★ ${ABIL[a][0]}</span>` : ''}</h2><p class="small muted">${a ? ABIL[a][1] + '. Turns on when you get In the Zone (a couple of big plays).' : ''}</p>
-      <div class="meter"><span>Coach trust</span><div class="bar"><i style="width:${s.trust}%"></i></div><b>${Math.round(s.trust)}</b></div>
+      <div class="ssmeter"><span>Coach trust</span><div class="ssm-track"><div class="ssm-fill" style="width:${s.trust}%"></div></div><b>${Math.round(s.trust)}</b></div>
       <p class="small muted">${p.pos === 'QB' ? 'High trust means more freedom and a stronger supporting cast.' : SS_OFF.includes(p.pos) ? 'High trust means more plays designed for you and the QB looks your way more.' : 'High trust earns you more big-play chances.'} Grades of B or better raise it.</p></div>
     <div class="card"><h2>Brand</h2><div class="brand"><div><b>${s.fans >= 1e6 ? (s.fans / 1e6).toFixed(2) + 'M' : s.fans >= 1000 ? (s.fans / 1000).toFixed(1) + 'K' : s.fans}</b><span>followers</span></div><div><b>$${s.cash.toFixed(1)}M</b><span>to spend</span></div></div><div class="deals">${deals}</div></div></div>`;
   // training
@@ -247,7 +247,7 @@ viewStar = function () {
   // badges + legacy
   const tot = ssTot(p), legacy = Math.round(typeof hofScore === 'function' ? hofScore(p, tot) : 0);
   const badges = `<div class="card"><h2>Milestones <span class="muted small">${Object.keys(s.badges).length}/${SS_BADGES.length}</span></h2><div class="badges">${SS_BADGES.map(([id, name]) => `<span class="badge ${s.badges[id] ? 'got' : ''}">${s.badges[id] ? '🏅' : '🔒'} ${name}</span>`).join('')}</div>
-    <h2 style="margin-top:12px">Hall of Fame legacy</h2><div class="meter"><span>Legacy</span><div class="bar"><i style="width:${Math.min(100, legacy / 2.4)}%"></i></div><b>${legacy}/240</b></div><p class="small muted">Five or more seasons, a legacy score of 240 and All-Pro teams or awards punch your ticket.</p></div>`;
+    <h2 style="margin-top:12px">Hall of Fame legacy</h2><div class="ssmeter"><span>Legacy</span><div class="ssm-track"><div class="ssm-fill" style="width:${Math.min(100, legacy / 2.4)}%"></div></div><b>${legacy}/240</b></div><p class="small muted">Five or more seasons, a legacy score of 240 and All-Pro teams or awards punch your ticket.</p></div>`;
   // gear
   const shop = `<div class="card"><h2>Gear locker</h2><div class="gear">${Object.entries(SS_GEAR).map(([slot, items]) => `<label>${slot[0].toUpperCase() + slot.slice(1)} <select data-act="ss-gear" data-slot="${slot}">${items.map(([id, n, cost]) => { const own = !cost || s.owned[slot + ':' + id]; return `<option value="${id}" ${s.gear[slot] === id ? 'selected' : ''}>${n}${own ? '' : ` — $${cost}M`}</option>`; }).join('')}</select></label>`).join('')}</div><p class="small muted">Gear shows up on your player in the 3D view. Endorsement money pays for it.</p></div>`;
   // game log

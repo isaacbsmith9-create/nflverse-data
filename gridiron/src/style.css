@@ -464,8 +464,8 @@ table.box td, table.box th { padding: 4px 8px; }
 
 /* ---- superstar 2 ---- */
 .ab-chip { color: #ffd23f; font-size: .8em; }
-.meter { display: grid; grid-template-columns: 110px 1fr 54px; gap: 10px; align-items: center; font-size: 14px; margin: 8px 0; }
-.meter .bar { margin: 0; height: 10px; } .meter b { text-align: right; }
+.ssmeter { display: grid; grid-template-columns: 110px 1fr 54px; gap: 10px; align-items: center; font-size: 14px; margin: 8px 0; }
+.ssmeter .bar { display: block; margin: 0; height: 10px; } .ssmeter b { text-align: right; } .ssmeter span { font-size: 13px; }
 .brand { display: flex; gap: 22px; margin-bottom: 10px; } .brand div { display: flex; flex-direction: column; } .brand b { font: 800 30px/1 var(--f-display); color: var(--amber); } .brand span { font-size: 12px; color: var(--muted); }
 .deals { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
 .deal { background: var(--bg3); border-radius: 8px; padding: 6px 10px; display: flex; flex-direction: column; font-size: 13px; opacity: .55; } .deal.got { opacity: 1; border: 1px solid var(--amber); } .deal span { font-size: 12px; color: var(--muted); }
@@ -485,3 +485,10 @@ table.box td, table.box th { padding: 4px 8px; }
 .tr-reps { display: flex; gap: 6px; min-height: 28px; } .tr-rep { padding: 3px 10px; border-radius: 99px; font-weight: 800; font-size: 13px; background: var(--bg3); }
 .tr-rep.perfect { background: #ffd23f; color: #1a1300; } .tr-rep.good { background: #1e5a39; color: #c9f5da; } .tr-rep.ok { background: #23415a; } .tr-rep.miss { background: #5a1e1e; }
 .tr-go { font-size: 22px; padding: 14px 40px; touch-action: manipulation; }
+
+/* ---- superstar focused home ---- */
+.ss-home { display: flex; gap: 16px; align-items: center; background: linear-gradient(110deg, color-mix(in srgb, var(--c1) 55%, var(--bg2)), var(--bg2) 75%); }
+@media (max-width: 600px) { .ss-home { flex-wrap: wrap; } .ss-home .ss-num { font-size: 44px; min-width: 50px; } }
+.ssm-track { height: 10px; border-radius: 6px; background: rgba(255,255,255,.12); overflow: hidden; min-width: 80px; }
+.ssm-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, #ffb81c, #ffd23f); }
+.ss-home .grow { min-width: 0; } .ss-home .ssmeter { max-width: 100% !important; grid-template-columns: auto 1fr 34px; }

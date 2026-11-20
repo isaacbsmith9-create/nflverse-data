@@ -123,7 +123,7 @@ LSS.liveStep = function (dt) {
     if (inp.actionEdge && s.side === 'O' && car !== s && car === this.passer && this.passReady && !pl.thrown && this.eligible.includes(s)) {
       inp.actionEdge = false;
       const open = this.openness ? this.openness(s) : 1;
-      if (open > 0.9 || chance(0.35)) { this.throwBall(s); this.h.toast && this.h.toast('QB heard you — ball\'s coming!', 1200); }
+      if (open > 1.6 || (open > 1.0 && chance(0.4))) { this.throwBall(s); this.h.toast && this.h.toast('QB heard you — ball\'s coming!', 1200); }
       else this.h.toast && this.h.toast('Covered — the QB looks elsewhere.', 1200);
     }
     inp.sw = false;
@@ -132,7 +132,7 @@ LSS.liveStep = function (dt) {
 };
 // the QB likes throwing to the star
 const _opennessSS = LSS.openness;
-LSS.openness = function (r) { const v = _opennessSS.call(this, r); const p = ssPlayer(this.L); return p && r.p && r.p.id === p.id && this.passer !== this.ctrl ? v + 0.7 : v; };
+LSS.openness = function (r) { const v = _opennessSS.call(this, r); const p = ssPlayer(this.L); return p && r.p && r.p.id === p.id && this.passer !== this.ctrl ? v + 0.25 : v; };
 
 // ---------- setup screen + My Player tab ----------
 const _setupGoSS = setupGo;
